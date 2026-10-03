@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- ============================================================
+       JARVIS — Picker View
+       ------------------------------------------------------------
+       "Show me my prints" → items appear as bubbles.
+       Tap the ones you want → the rest drift away,
+       your picks float up together, and Jarvis asks
+       which one to start with. Your choices land on a list.
+
+       ONE file: HTML + CSS + JS. No frameworks.
+       Data: sample items for now (localStorage step).
+       Later this swaps to Google Sheets → DeepSeek → Obsidian.
+       ============================================================ -->
+
+  <meta charset="UTF-8">
+
+  <!-- Fit phone screens, including iPhone notch areas -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+  <!-- iPhone "Add to Home Screen" support -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0a0e14">
+
+  <title>JARVIS — Picker</title>
+
+  <style>
+    /* ==========================================================
+       THEME — same variables as index.html so the app matches
+       ========================================================== */
+    :root {
+      --bg:      #0a0e14;
+      --panel:   #111722;
+      --accent:  #00d4ff;
+      --text:    #e8f1f8;
+      --dim:     #7a8a9e;
+      --good:    #3ddc84;
+      --glow:    rgba(0, 212, 255, 0.35);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right)
+               env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    /* ==========================================================
+       TOP BAR — back button + title
+       ========================================================== */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 16px 8px;
+    }
+
+    .back {
+      width: 46px;
+      height: 46px;               /* big touch target */
+      border-radius: 50%;
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      background: var(--panel);
+      color: var(--accent);
+      font-size: 1.3rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .back:active {
+      transform: scale(0.92);
+      box-shadow: 0 0 18px var(--glow);
+    }
+
+    .topbar-title {
+      font-size: 1.15rem;
+      letter-spacing: 0.25em;
+      font-weight: 700;
+      color: var(--accent);
+      text-shadow: 0 0 14px var(--glow);
+    }
+
+    /* ==========================================================
+       JARVIS LINE — the "face" of it: one clean line of text
+       ========================================================== */
+    .jarvis-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 22px 4px;
+      min-height: 56px;
+    }
+
+    .reactor {
+      flex: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 12px var(--glow);
+      animation: pulse 3s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 6px  var(--glow); opacity: 0.85; }
+      50%      { box-shadow: 0 0 18px var(--glow); opacity: 1;    }
+    }
+
+    #jarvis-text {
+      font-size: 1rem;
+      color: var(--text);
+      line-height: 1.35;
+    }
+
+    /* ==========================================================
+       SKY — where the bubbles float
+       ========================================================== */
+    .sky {
+      flex: 1;
+      position: relative;
+      overflow: hidden;           /* dismissed bubbles fly off-screen */
+      margin: 8px 0;
+    }
+
+    /* Each bubble = one item you can pick */
+    .bubble {
+      position: absolute;
+      left: var(--x);             /* set by JS: spot in the sky */
+      top:  var(--y);
+      background: var(--panel);
+      border: 1px solid rgba(0, 212, 255, 0.25);
+      border-radius: 18px;
+      padding: 14px 16px;
+      min-width: 150px;
+      max-width: 200px;
+      cursor: pointer;
+      /* Gentle floating idle animation, staggered per bubble */
+      animation: bob 4s ease-in-out infinite;
+      animation-delay: var(--delay);
+      transition: left 0.6s cubic-bezier(.22,1,.36,1),
+                  top  0.6s cubic-bezier(.22,1,.36,1),
+                  transform 0.5s ease, opacity 0.5s ease,
+                  border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    @keyframes bob {
+      0%, 100% { transform: translateY(0);    }
+      50%      { transform: translateY(-6px); }
+    }
+
+    .bubble:active { transform: scale(0.95); }
+
+    .bubble-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+
+    .bubble-meta {
+      margin-top: 4px;
+      font-size: 0.72rem;
+      color: var(--dim);
+    }
+
+    /* Picked state: glows, gets a little bigger, stops bobbing */
+    .bubble.picked {
+      animation: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 22px var(--glow);
+      background: rgba(0, 212, 255, 0.08);
+    }
+
+    /* Dismissed state: sinks, shrinks, fades — then JS removes it */
+    .bubble.dismissed {
+      animation: none;
+      opacity: 0;
+      transform: translateY(90px) scale(0.5);
+      pointer-events: none;      /* can't tap a ghost */
+    }
+
+    /* ==========================================================
+       BOTTOM BAR — Done / Clear controls
+       ========================================================== */
+    .controls {
+      display: flex;
+      gap: 12px;
+      padding: 10px 20px 20px;
+      max-width: 520px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 16px;              /* big touch target */
+      border-radius: 16px;
+      border: 1px solid rgba(0, 212, 255, 0.35);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .btn:active {
+      transform: scale(0.96);
+      box-shadow: 0 0 20px var(--glow);
+    }
+
+    .btn.primary {
+      background: var(--accent);
+      color: #04222b;
+      border-color: var(--accent);
+    }
+
+    .btn.hidden { display: none; }
+
+    /* Small screens: slightly smaller bubbles so 2 columns fit */
+    @media (max-width: 380px) {
+      .bubble { min-width: 132px; max-width: 170px; padding: 12px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reactor, .bubble { animation: none; }
+      .bubble { transition: opacity 0.2s ease; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ===================== TOP BAR ===================== -->
+  <div class="topbar">
+    <a class="back" href="index.html" aria-label="Back to home">←</a>
+    <span class="topbar-title">PICKER</span>
+  </div>
+
+  <!-- ===================== JARVIS SPEAKS HERE ===================== -->
+  <div class="jarvis-line">
+    <span class="reactor"></span>
+    <span id="jarvis-text">One moment…</span>
+  </div>
+
+  <!-- ===================== THE SKY (bubbles live here) ===================== -->
+  <div class="sky" id="sky"></div>
+
+  <!-- ===================== CONTROLS ===================== -->
+  <div class="controls">
+    <button class="btn" id="clear-btn">Clear</button>
+    <button class="btn primary" id="done-btn">Done</button>
+  </div>
+
+  <script>
+    /* ==========================================================
+       SAMPLE DATA — this is the "localStorage step" of the plan.
+       LATER this exact list shape comes from Google Sheets
+       (filament inventory), then DeepSeek, then your vault.
+       Keep the same fields and nothing else has to change.
+       ========================================================== */
+    const SAMPLE_ITEMS = [
+      { id: "p1",  name: "Phone stand — desk",        meta: "PETG black · ~2h"    },
+      { id: "p2",  name: "Panel mount bracket",       meta: "Electric Boyes · ~1h" },
+      { id: "p3",  name: "Cable clips ×20",           meta: "PLA grey · ~3h"      },
+      { id: "p4",  name: "Label maker battery cover", meta: "PLA white · ~45m"    },
+      { id: "p5",  name: "Shop sign — Dynamic Media", meta: "PETG teal · ~6h"     },
+      { id: "p6",  name: "Filament dry box clips",    meta: "PETG · ~1h"          },
+      { id: "p7",  name: "Drill bit organizer",       meta: "PLA red · ~4h"       },
+      { id: "p8",  name: "Key fob — shop logo",       meta: "PLA silk · ~30m"     },
+      { id: "p9",  name: "Outlet cover spacers",      meta: "Electric Boyes · ~1h" },
+      { id: "p10", name: "Headphone wall hook",       meta: "PETG black · ~2h"    }
+    ];
+
+    /* ==========================================================
+       STATE — what's on screen and what you've picked
+       ========================================================== */
+    let items  = [...SAMPLE_ITEMS]; // items currently floating in the sky
+    let picked = [];                // items you've tapped
+    let phase  = "pick";            // "pick" → "chooseFirst" → done
+
+    const sky        = document.getElementById("sky");
+    const jarvisText = document.getElementById("jarvis-text");
+    const doneBtn    = document.getElementById("done-btn");
+    const clearBtn   = document.getElementById("clear-btn");
+
+    /* ==========================================================
+       JARVIS SPEAKS — one clean line at a time
+       ========================================================== */
+    function jarvisSays(text) {
+      jarvisText.textContent = text;
+    }
+
+    /* ==========================================================
+       LAYOUT — deal bubbles into loose rows across the sky.
+       Positions are percentages so it fits any phone.
+       Picked bubbles get dealt again into one tidy row at top —
+       that's the "float up close together" move.
+       ========================================================== */
+    function layoutSky() {
+      const bubbles = sky.querySelectorAll(".bubble:not(.dismissed)");
+      const twoCols = sky.clientWidth < 520;
+      const cols    = twoCols ? 2 : 3;
+
+      bubbles.forEach((bubble, i) => {
+        if (bubble.classList.contains("picked")) {
+          // PICKED: tidy row along the top, close together
+          const row = Math.floor(i / 3);
+          const col = i % 3;
+          bubble.style.setProperty("--x", (4 + col * 32) + "%");
+          bubble.style.setProperty("--y", (4 + row * 22) + "%");
+        } else {
+          // UNPICKED: scattered loosely through the lower sky
+          const row = Math.floor(i / cols);
+          const col = i % cols;
+          bubble.style.setProperty("--x", (6 + col * (twoCols ? 46 : 32)) + "%");
+          bubble.style.setProperty("--y", (28 + row * 22) + "%");
+        }
+      });
+    }
+
+    /* ==========================================================
+       RENDER — build the bubbles from the items list
+       ========================================================== */
+    function renderSky() {
+      sky.innerHTML = "";
+      items.forEach(item => {
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        if (picked.some(p => p.id === item.id)) bubble.classList.add("picked");
+        bubble.style.setProperty("--delay", (Math.random() * 2).toFixed(2) + "s");
+        bubble.dataset.id = item.id;
+        bubble.innerHTML =
+          '<div class="bubble-name">' + item.name + '</div>' +
+          '<div class="bubble-meta">' + item.meta + '</div>';
+        bubble.addEventListener("click", () => onBubbleTap(item.id));
+        sky.appendChild(bubble);
+      });
+      layoutSky();
+    }
+
+    /* ==========================================================
+       TAP A BUBBLE
+       Pick phase:    toggle it picked/unpicked.
+       Choose-first:  tapping one names it your starting task.
+       ========================================================== */
+    function onBubbleTap(id) {
+      if (phase === "pick") {
+        const item = items.find(i => i.id === id);
+        const idx  = picked.findIndex(p => p.id === id);
+
+        if (idx >= 0) {
+          picked.splice(idx, 1);                       // unpick it
+        } else {
+          picked.push(item);                           // pick it
+        }
+
+        const bubble = sky.querySelector('[data-id="' + id + '"]');
+        bubble.classList.toggle("picked");
+        layoutSky();                                   // picked ones float up
+
+        if (picked.length === 0) {
+          jarvisSays("Here are your " + items.length + " prints. Tap the ones you want to do.");
+        } else {
+          jarvisSays(picked.length + " selected. Tap Done when you're ready.");
+        }
+      } else if (phase === "chooseFirst") {
+        const item = picked.find(p => p.id === id);
+        startWith(item);
+      }
+    }
+
+    /* ==========================================================
+       DONE — dismiss the unpicked, then ask "which first?"
+       ========================================================== */
+    function onDone() {
+      if (phase !== "pick") return;
+
+      if (picked.length === 0) {
+        jarvisSays("Nothing selected. Tap a few bubbles first.");
+        return;
+      }
+
+      // The rest "slowly disappear and move down"
+      items.forEach(item => {
+        if (!picked.some(p => p.id === item.id)) {
+          const bubble = sky.querySelector('[data-id="' + item.id + '"]');
+          bubble.classList.add("dismissed");
+        }
+      });
+
+      // Only your picks remain, floating up top together
+      items = [...picked];
+      phase = "chooseFirst";
+
+      setTimeout(() => {
+        renderSky();
+        jarvisSays("Which one would you like to start with?");
+      }, 650);  // wait for the dismissal drift to finish
+    }
+
+    /* ==========================================================
+       START WITH — your first task gets named and saved
+       ========================================================== */
+    function startWith(item) {
+      phase = "done";
+
+      // Save the whole working list — first task marked.
+      // localStorage = step 1 of the data plan. Today view
+      // will read this same key later.
+      const list = picked.map(p => ({ ...p, first: p.id === item.id }));
+      localStorage.setItem("jarvis.printQueue", JSON.stringify(list));
+
+      jarvisSays('Starting with "' + item.name + '." ' +
+                 picked.length + " items on your list. It's saved.");
+
+      // Swap Done for a "View list" path home (Today view comes next)
+      doneBtn.textContent = "Back to home";
+      doneBtn.onclick = () => (window.location.href = "index.html");
+      clearBtn.classList.add("hidden");
+    }
+
+    /* ==========================================================
+       CLEAR — unpick everything, back to the full sky
+       ========================================================== */
+    function onClear() {
+      if (phase !== "pick") return;
+      picked = [];
+      renderSky();
+      jarvisSays("Cleared. Tap the ones you want to do.");
+    }
+
+    /* ==========================================================
+       WIRE IT UP + OPENING LINE
+       ========================================================== */
+    doneBtn.addEventListener("click", onDone);
+    clearBtn.addEventListener("click", onClear);
+    window.addEventListener("resize", layoutSky);  // rotate phone = re-deal
+
+    renderSky();
+    jarvisSays("Here are your " + items.length +
+               " prints. Tap the ones you want to do, then Done.");
+  </script>
+</body>
+</html>
