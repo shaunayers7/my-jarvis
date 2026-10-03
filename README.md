@@ -6,7 +6,8 @@ a second brain personal assistant
 - Ask "show me my prints" on the home screen, or open the Picker.
 - Suggestions stay centered in one readable column, with space between cards.
 - Tap to highlight your picks. Each tap restarts a 3-second pause; unselected
-  cards then fade out and your picks line up in the order you selected them.
+  cards then fade out and your picks glide to the top in their original screen
+  order, without crossing. The saved list still remembers your selection order.
 - You can also say "done" in the conversation or tap Done in the Picker.
   Typing in the conversation holds the timer so it does not interrupt you.
 - Tap a remaining card to choose your first task and save the list.
@@ -16,9 +17,11 @@ a second brain personal assistant
 ## Conversation and motion
 
 - The conversation shows Jarvis's responses only, not copies of your prompts.
-- Cards use subtle highlights and short eased fades. Picks are reordered while
-  invisible, then revealed as a column, so cards never fly through one another.
-- The list's height settles gently rather than snapping closed. Jarvis reserves
+- Cards float upward while fading in over 800ms, into a centered column.
+  Long suggestion lists scroll inside the card area instead of overflowing.
+- Unpicked cards fade out over 500ms; selected cards stay visible and gently
+  glide to the top over 900ms. They never fade out and reappear.
+- The card area stays steady while the picks move. Jarvis reserves
   space for each response before typing it, so text does not push the screen
   around on every letter.
 - The iPhone/iPad Reduce Motion setting disables movement and typing effects.

@@ -180,10 +180,12 @@
        ========================================================== */
     .sky {
       align-self: stretch;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      align-content: start;
-      gap: 16px;
+      display: flex;
+      flex-direction: column;
+      height: clamp(240px, 60vh, 640px);
+      height: clamp(240px, 60dvh, 640px);
+      overflow-y: auto;
+      overflow-anchor: none;
       width: 100%;
       max-width: 520px;
       margin: 0 auto;
@@ -191,8 +193,18 @@
       border: 1px solid rgba(0, 212, 255, 0.12);
       border-radius: 18px;
       background: rgba(17, 23, 34, 0.5);
-      animation: rise 0.36s var(--settle);
     }
+
+    .card-list {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
+      width: 100%;
+      flex: none;
+      margin: auto 0;
+    }
+
+    .sky.settled .card-list { margin: 0; }
 
     .bubble {
       width: 100%;
@@ -359,33 +371,41 @@
       ).finished));
     }
 
+    function revealCards(sky) {
+      if (reduceMotion() || !Element.prototype.animate) return;
+      sky.querySelectorAll(".bubble").forEach(card => {
+        card.animate(
+          [{ opacity: 0, transform: "translateY(32px)" },
+           { opacity: 1, transform: "translateY(0)" }],
+          { duration: 800, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+        );
+      });
+    }
+
     async function settleCards(sky, selected) {
       const cards = [...sky.querySelectorAll(".bubble")];
-      const remaining = selected.map(item =>
-        sky.querySelector('[data-id="' + item.id + '"]'));
+      const remaining = cards.filter(card => selected.some(item => item.id === card.dataset.id));
       const dismissed = cards.filter(card => !remaining.includes(card));
       const animated = !reduceMotion() && Boolean(Element.prototype.animate);
       cards.forEach(card => { card.disabled = true; });
+      if (animated) cards.forEach(card => card.getAnimations().forEach(animation => animation.finish()));
 
-      await fadeElements(dismissed, 1, 0, 240);
-      // Reorder only while invisible, so selected cards never cross.
-      await fadeElements(remaining, 1, 0, 140);
-      const oldHeight = sky.getBoundingClientRect().height;
+      await fadeElements(dismissed, 1, 0, 500);
+      const first = remaining.map(card => card.getBoundingClientRect());
       dismissed.forEach(card => card.remove());
+      sky.classList.add("settled");
+      sky.scrollTop = 0;
       remaining.forEach(card => {
-        if (animated) card.getAnimations().forEach(animation => animation.cancel());
         card.removeAttribute("aria-pressed");
-        sky.appendChild(card);
       });
-      const newHeight = sky.getBoundingClientRect().height;
       if (animated) {
-        // One measured height transition prevents the surrounding page jumping.
-        const resize = sky.animate(
-          [{ height: oldHeight + "px" }, { height: newHeight + "px" }],
-          { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
-        );
-        await Promise.all([resize.finished, fadeElements(remaining, 0, 1, 320)]);
-        remaining.forEach(card => card.getAnimations().forEach(animation => animation.cancel()));
+        // Preserve screen order and use one easing curve so cards never cross.
+        const last = remaining.map(card => card.getBoundingClientRect());
+        await Promise.all(remaining.map((card, index) => card.animate(
+          [{ transform: "translateY(" + (first[index].top - last[index].top) + "px)" },
+           { transform: "translateY(0)" }],
+          { duration: 900, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+        ).finished));
       }
       remaining.forEach(card => { card.disabled = false; });
     }
@@ -446,6 +466,9 @@
 
       const sky = document.createElement("div");
       sky.className = "sky";
+      const list = document.createElement("div");
+      list.className = "card-list";
+      sky.appendChild(list);
       chat.appendChild(sky);
       picker.el = sky;
 
@@ -460,13 +483,14 @@
         b.querySelector(".bubble-name").textContent = item.name;
         b.querySelector(".bubble-meta").textContent = item.meta;
         b.addEventListener("click", () => onBubbleTap(item.id));
-        sky.appendChild(b);
+        list.appendChild(b);
       });
 
       chat.scrollTo({
         top: sky.offsetTop - chat.offsetTop,
-        behavior: reduceMotion() ? "auto" : "smooth"
+        behavior: "auto"
       });
+      revealCards(sky);
     }
 
     function schedulePicks() {
@@ -512,7 +536,8 @@
       activePicker.phase = "settling";
       const survivors = [...activePicker.picked];
       await settleCards(activePicker.el, survivors);
-      activePicker.items = survivors;
+      activePicker.items = [...activePicker.el.querySelectorAll(".bubble")].map(card =>
+        survivors.find(item => item.id === card.dataset.id));
       activePicker.phase = "chooseFirst";
 
       await jarvisSays(survivors.length + " it is. Which one first — tap it or name it.");
@@ -607,7 +632,7 @@
           if (num) {
             const n = { "1st": 1, "first": 1, "2nd": 2, "second": 2,
                         "3rd": 3, "third": 3 }[num[1]] || parseInt(num[1], 10);
-            choice = picker.picked[n - 1];
+            choice = picker.items[n - 1];
           }
           if (!choice) {
             choice = picker.picked.find(p =>
