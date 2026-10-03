@@ -2,39 +2,48 @@
 <html lang="en">
 <head>
   <!-- ============================================================
-       JARVIS — Home Base / Dashboard Shell
+       JARVIS — Home: the conversation screen
        ------------------------------------------------------------
-       This is the front door of your second brain.
-       Everything else (Picker, Today, Inventory, Notes)
-       launches from here.
-       Built as ONE file: HTML + CSS + JS together. No frameworks.
+       This IS Jarvis now. One clean screen:
+         - His line TYPES out letter by letter (voice stand-in)
+         - You answer in the prompt box (until voice ships)
+         - Ask for things ("show me my prints") and the bubbles
+           rise up right here in the chat — tap your picks, the
+           rest drift away, he asks which to start with.
+
+       He greets you with your day brought UP: appointments from
+       the Inbox, your print queue from the Picker.
+
+       The old card dashboard still exists as dashboard.html
+       (linked up top as "Cards"), along with today/inbox views.
+
+       ONE file: HTML + CSS + JS. No frameworks.
        ============================================================ -->
 
   <meta charset="UTF-8">
 
-  <!-- Makes it fit a phone screen properly, including iPhone notch areas -->
+  <!-- Fit phone screens, including iPhone notch areas -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
-  <!-- iPhone "Add to Home Screen" support: makes it feel like a real app -->
+  <!-- iPhone "Add to Home Screen" support -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0a0e14">
 
   <title>JARVIS</title>
 
-  <!-- LATER: we'll add a manifest.json + icons here when we make it
-       a full installable PWA. One thing at a time. -->
-
   <style>
     /* ==========================================================
-       THEME — change these few colours and the whole app follows
+       THEME
        ========================================================== */
     :root {
-      --bg:      #0a0e14;   /* deep space blue-black           */
-      --panel:   #111722;   /* card background                 */
-      --accent:  #00d4ff;   /* arc-reactor cyan                */
-      --text:    #e8f1f8;   /* main text                       */
-      --dim:     #7a8a9e;   /* secondary text                  */
+      --bg:      #0a0e14;
+      --panel:   #111722;
+      --accent:  #00d4ff;
+      --text:    #e8f1f8;
+      --dim:     #7a8a9e;
+      --good:    #3ddc84;
+      --appt:    #ff5c5c;
       --glow:    rgba(0, 212, 255, 0.35);
     }
 
@@ -42,360 +51,623 @@
       margin: 0;
       padding: 0;
       box-sizing: border-box;
-      /* Removes the grey flash iPhones show when you tap things */
       -webkit-tap-highlight-color: transparent;
     }
 
     body {
-      min-height: 100vh;
+      height: 100vh;
+      height: 100dvh;              /* no jump when iPhone URL bar hides */
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       display: flex;
       flex-direction: column;
-      /* Respect the iPhone notch / home bar */
+      overflow: hidden;
       padding: env(safe-area-inset-top) env(safe-area-inset-right)
                env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
 
     /* ==========================================================
-       HEADER — title, glowing "reactor", greeting, clock
+       TOP — reactor + wordmark + tiny view links
        ========================================================== */
-    header {
-      text-align: center;
-      padding: 36px 20px 24px;
-    }
-
-    .title {
-      font-size: 1.6rem;
-      letter-spacing: 0.45em;      /* spaced-out letters = Jarvis feel */
-      font-weight: 700;
-      color: var(--accent);
-      text-shadow: 0 0 18px var(--glow);
+    .topbar {
       display: flex;
       align-items: center;
-      justify-content: center;
       gap: 12px;
+      padding: 16px 18px 10px;
     }
 
-    /* The little pulsing dot = the arc reactor. Pure CSS. */
     .reactor {
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
       background: var(--accent);
-      box-shadow: 0 0 12px var(--glow);
+      box-shadow: 0 0 14px var(--glow);
       animation: pulse 3s ease-in-out infinite;
     }
 
+    .reactor.thinking {            /* pulses faster while he "types" */
+      animation: pulse 0.8s ease-in-out infinite;
+    }
+
     @keyframes pulse {
-      0%, 100% { box-shadow: 0 0 8px  var(--glow); opacity: 0.85; }
-      50%      { box-shadow: 0 0 22px var(--glow); opacity: 1;    }
+      0%, 100% { box-shadow: 0 0 7px  var(--glow); opacity: 0.85; }
+      50%      { box-shadow: 0 0 20px var(--glow); opacity: 1;    }
     }
 
-    .greeting {
-      margin-top: 14px;
-      font-size: 1.05rem;
+    .wordmark {
+      font-size: 1rem;
+      letter-spacing: 0.4em;
+      font-weight: 700;
+      color: var(--accent);
+      text-shadow: 0 0 14px var(--glow);
+    }
+
+    .topbar-links {
+      margin-left: auto;
+      display: flex;
+      gap: 6px;
+    }
+
+    .topbar-links a {
       color: var(--dim);
-    }
-
-    .clock {
-      margin-top: 4px;
-      font-size: 2.4rem;
-      font-weight: 300;
+      text-decoration: none;
+      font-size: 0.72rem;
       letter-spacing: 0.08em;
-      color: var(--text);
+      padding: 8px 10px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.1);
     }
 
-    .date {
-      font-size: 0.9rem;
-      color: var(--dim);
-      margin-top: 2px;
+    .topbar-links a:active {
+      color: var(--accent);
+      border-color: var(--accent);
     }
 
     /* ==========================================================
-       DASHBOARD — the big tappable cards (2x2 grid on a phone)
+       CHAT — the conversation scroll area
        ========================================================== */
-    main {
+    .chat {
       flex: 1;
-      width: 100%;
-      max-width: 520px;            /* stays tidy on big screens too */
-      margin: 0 auto;
-      padding: 12px 20px 20px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-      align-content: start;
-    }
-
-    .card {
-      background: var(--panel);
-      border: 1px solid rgba(0, 212, 255, 0.18);
-      border-radius: 20px;
-      padding: 26px 14px;
-      min-height: 130px;           /* big touch target */
+      overflow-y: auto;
+      padding: 8px 18px 12px;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      cursor: pointer;
-      transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+      gap: 14px;
     }
 
-    /* Press feedback: card dips and glows when tapped */
-    .card:active {
-      transform: scale(0.96);
-      border-color: var(--accent);
-      box-shadow: 0 0 24px var(--glow);
-    }
-
-    .card svg {
-      width: 34px;
-      height: 34px;
-      color: var(--accent);
-    }
-
-    .card-label {
-      font-size: 1.05rem;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-    }
-
-    .card-sub {
-      font-size: 0.75rem;
-      color: var(--dim);
-    }
-
-    /* ==========================================================
-       FOOTER — tiny status line so you know which "mode" you're in
-       ========================================================== */
-    footer {
-      text-align: center;
-      padding: 14px;
-      font-size: 0.75rem;
-      color: var(--dim);
-      letter-spacing: 0.06em;
-    }
-
-    footer .dot { color: #3ddc84; }  /* green = local mode is healthy */
-
-    /* ==========================================================
-       TOAST — the little bubble that pops up ("Coming soon...")
-       ========================================================== */
-    .toast {
-      position: fixed;
-      left: 50%;
-      bottom: 60px;
-      transform: translateX(-50%) translateY(20px);
+    /* --- his line (types out) --- */
+    .line-jarvis {
+      align-self: flex-start;
+      max-width: 88%;
       background: var(--panel);
-      border: 1px solid var(--accent);
-      color: var(--text);
-      padding: 12px 22px;
-      border-radius: 30px;
-      font-size: 0.9rem;
-      box-shadow: 0 0 24px var(--glow);
+      border: 1px solid rgba(0, 212, 255, 0.2);
+      border-radius: 4px 18px 18px 18px;
+      padding: 13px 16px;
+      font-size: 1rem;
+      line-height: 1.45;
+      animation: rise 0.25s ease;
+    }
+
+    /* --- your line --- */
+    .line-you {
+      align-self: flex-end;
+      max-width: 88%;
+      background: rgba(0, 212, 255, 0.12);
+      border: 1px solid rgba(0, 212, 255, 0.35);
+      border-radius: 18px 4px 18px 18px;
+      padding: 13px 16px;
+      font-size: 1rem;
+      line-height: 1.45;
+      animation: rise 0.25s ease;
+    }
+
+    .line-you .who {
+      display: block;
+      font-size: 0.65rem;
+      letter-spacing: 0.15em;
+      color: var(--dim);
+      margin-bottom: 4px;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0);   }
+    }
+
+    /* blinking caret while he types */
+    .caret::after {
+      content: "▌";
+      color: var(--accent);
+      animation: blink 0.7s step-end infinite;
+    }
+
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ==========================================================
+       BUBBLE SKY — appears inside the chat when you ask for it
+       ========================================================== */
+    .sky {
+      position: relative;
+      height: 340px;
+      align-self: stretch;
+      border: 1px solid rgba(0, 212, 255, 0.12);
+      border-radius: 18px;
+      background: rgba(17, 23, 34, 0.5);
+      overflow: hidden;
+      animation: rise 0.35s ease;
+    }
+
+    .bubble {
+      position: absolute;
+      left: var(--x);
+      top:  var(--y);
+      background: var(--panel);
+      border: 1px solid rgba(0, 212, 255, 0.25);
+      border-radius: 16px;
+      padding: 12px 14px;
+      min-width: 130px;
+      max-width: 180px;
+      cursor: pointer;
+      animation: bob 4s ease-in-out infinite;
+      animation-delay: var(--delay);
+      transition: left 0.6s cubic-bezier(.22,1,.36,1),
+                  top  0.6s cubic-bezier(.22,1,.36,1),
+                  transform 0.5s ease, opacity 0.5s ease,
+                  border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    @keyframes bob {
+      0%, 100% { transform: translateY(0);    }
+      50%      { transform: translateY(-6px); }
+    }
+
+    .bubble:active { transform: scale(0.95); }
+
+    .bubble-name { font-size: 0.9rem; font-weight: 600; line-height: 1.25; }
+    .bubble-meta { margin-top: 3px; font-size: 0.68rem; color: var(--dim); }
+
+    .bubble.picked {
+      animation: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 20px var(--glow);
+      background: rgba(0, 212, 255, 0.08);
+    }
+
+    .bubble.dismissed {
+      animation: none;
       opacity: 0;
-      pointer-events: none;        /* never blocks taps */
-      transition: opacity 0.25s ease, transform 0.25s ease;
-      white-space: nowrap;
+      transform: translateY(80px) scale(0.5);
+      pointer-events: none;
     }
 
-    .toast.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
+    /* ==========================================================
+       PROMPT BOX — your voice, for now
+       ========================================================== */
+    .prompt {
+      display: flex;
+      gap: 10px;
+      padding: 10px 16px 16px;
     }
 
-    /* Respect users who prefer less motion */
+    #prompt-input {
+      flex: 1;
+      padding: 16px;
+      border-radius: 30px;
+      border: 1px solid rgba(0, 212, 255, 0.35);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 1rem;
+      outline: none;
+    }
+
+    #prompt-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 16px var(--glow);
+    }
+
+    #prompt-input::placeholder { color: var(--dim); }
+
+    .send-btn {
+      width: 56px;
+      height: 56px;
+      flex: none;
+      border-radius: 50%;
+      border: none;
+      background: var(--accent);
+      color: #04222b;
+      font-size: 1.3rem;
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .send-btn:active {
+      transform: scale(0.9);
+      box-shadow: 0 0 20px var(--glow);
+    }
+
+    @media (max-width: 380px) {
+      .bubble { min-width: 118px; max-width: 150px; padding: 10px 12px; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
-      .reactor { animation: none; }
-      .card, .toast { transition: none; }
+      .reactor, .bubble, .caret::after { animation: none; }
+      .line-jarvis, .line-you, .sky { animation: none; }
+      .bubble { transition: opacity 0.2s ease; }
     }
   </style>
 </head>
 
 <body>
 
-  <!-- ===================== HEADER ===================== -->
-  <header>
-    <div class="title"><span class="reactor"></span>JARVIS</div>
-    <div class="greeting" id="greeting">Hello</div>
-    <div class="clock" id="clock">--:--</div>
-    <div class="date" id="date"></div>
-  </header>
+  <!-- ===================== TOP ===================== -->
+  <div class="topbar">
+    <span class="reactor" id="reactor"></span>
+    <span class="wordmark">JARVIS</span>
+    <nav class="topbar-links">
+      <a href="today.html">Today</a>
+      <a href="inbox.html">Inbox</a>
+      <a href="dashboard.html">Cards</a>
+    </nav>
+  </div>
 
-  <!-- ===================== THE FOUR DOORS =====================
-       Each card is a "door" to a view.
-       data-ready="false" = not built yet → shows a toast.
-       When we build e.g. picker.html, we flip its data-ready
-       to "true" and the card will open it automatically.     -->
-  <main>
-    <div class="card" data-view="inbox" data-ready="true">
-      <!-- inbox tray icon -->
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 13l3-8h12l3 8v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-        <path d="M3 13h6l2 3h2l2-3h6"/>
-      </svg>
-      <span class="card-label">Inbox</span>
-      <span class="card-sub">dump it, I sort it</span>
-    </div>
+  <!-- ===================== CONVERSATION ===================== -->
+  <div class="chat" id="chat"></div>
 
-    <div class="card" data-view="picker" data-ready="true">
-      <!-- bubbles icon -->
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-        <circle cx="7" cy="7" r="3.2"/><circle cx="17" cy="7" r="3.2"/><circle cx="12" cy="16.5" r="3.2"/>
-      </svg>
-      <span class="card-label">Picker</span>
-      <span class="card-sub">tap &amp; choose</span>
-    </div>
-
-    <div class="card" data-view="today" data-ready="true">
-      <!-- calendar icon -->
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-        <rect x="3" y="5" width="18" height="16" rx="3"/>
-        <line x1="3" y1="10" x2="21" y2="10"/>
-        <line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/>
-      </svg>
-      <span class="card-label">Today</span>
-      <span class="card-sub">schedule &amp; reminders</span>
-    </div>
-
-    <div class="card" data-view="inventory" data-ready="false">
-      <!-- box icon -->
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5"/><line x1="12" y1="13" x2="12" y2="21"/>
-      </svg>
-      <span class="card-label">Inventory</span>
-      <span class="card-sub">print shop stock</span>
-    </div>
-
-    <div class="card" data-view="notes" data-ready="false">
-      <!-- note icon -->
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-        <rect x="5" y="3" width="14" height="18" rx="2"/>
-        <line x1="9" y1="8" x2="15" y2="8"/>
-        <line x1="9" y1="12" x2="15" y2="12"/>
-        <line x1="9" y1="16" x2="13" y2="16"/>
-      </svg>
-      <span class="card-label">Notes</span>
-      <span class="card-sub">your second brain</span>
-    </div>
-  </main>
-
-  <!-- ===================== STATUS LINE ===================== -->
-  <footer>
-    <span class="dot">●</span> LOCAL MODE — your data stays on this device
-    <br>
-    <button id="demo-btn" style="display:none; margin-top:10px; padding:10px 18px;
-            border-radius:30px; border:1px solid var(--accent); background:none;
-            color:var(--accent); font-size:0.8rem; cursor:pointer;">
-      Load demo data (testing)
-    </button>
-  </footer>
-
-  <!-- The toast bubble (hidden until needed) -->
-  <div class="toast" id="toast"></div>
+  <!-- ===================== PROMPT ===================== -->
+  <div class="prompt">
+    <input id="prompt-input" type="text" autocomplete="off"
+           placeholder='Talk to me… try "show me my prints"'>
+    <button class="send-btn" id="send-btn" aria-label="Send">↑</button>
+  </div>
 
   <script>
     /* ==========================================================
-       SETTINGS — tweak these to make Jarvis yours
+       SETTINGS
        ========================================================== */
-    const NAME = "sir";   // how Jarvis addresses you in the greeting
+    const NAME = "sir";
+    const TYPE_SPEED = 22;   // ms per character — his "voice"
 
     /* ==========================================================
-       CLOCK + GREETING
-       Keeps the time, date, and greeting on screen fresh.
+       STORAGE HELPERS — same keys the other views use
        ========================================================== */
-    function updateHeader() {
-      const now = new Date();
-
-      // Time, e.g. "6:42 PM"
-      document.getElementById("clock").textContent =
-        now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
-      // Date, e.g. "Friday, October 3"
-      document.getElementById("date").textContent =
-        now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
-
-      // Greeting changes with the time of day
-      const hour = now.getHours();
-      let word = "Good evening";
-      if (hour < 12) word = "Good morning";
-      else if (hour < 18) word = "Good afternoon";
-      document.getElementById("greeting").textContent = word + ", " + NAME + ".";
+    function loadJSON(key, fallback) {
+      try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
+      catch { return fallback; }
     }
-
-    updateHeader();                    // run once right away...
-    setInterval(updateHeader, 10000);  // ...then refresh every 10 seconds
-
-    /* ==========================================================
-       TOAST — pops a small message bubble for 2 seconds
-       ========================================================== */
-    let toastTimer;
-    function showToast(message) {
-      const toast = document.getElementById("toast");
-      toast.textContent = message;
-      toast.classList.add("show");
-      clearTimeout(toastTimer);  // cancel any previous hide
-      toastTimer = setTimeout(() => toast.classList.remove("show"), 2000);
+    function saveJSON(key, value) {
+      localStorage.setItem(key, JSON.stringify(value));
     }
 
     /* ==========================================================
-       DEMO DATA — one tap fills the app so you can test it.
-       The button only shows when storage is EMPTY, so it never
-       tramples your real stuff. Reload the page after tapping.
+       PRINT CATALOG — the pool "show me my prints" pulls from.
+       localStorage step for now; Google Sheets swaps in later.
        ========================================================== */
-    const DEMO_INBOX = [
-      { id: "d1", text: "take Callie to her friend's house",        bucket: "appointment", when: "at 7",      added: new Date().toISOString() },
-      { id: "d2", text: "supplier call about filament pricing",      bucket: "appointment", when: "at 2:30pm", added: new Date().toISOString() },
-      { id: "d3", text: "rebuild the van shelving",                  bucket: "project",     when: null,        added: new Date().toISOString() },
-      { id: "d4", text: "cable clips for the shop reno",             bucket: "print",      when: null,        added: new Date().toISOString() },
-      { id: "d5", text: "voice-controlled shop lights",              bucket: "idea",       when: null,        added: new Date().toISOString() },
-      { id: "d6", text: "pick up solder on the way home",            bucket: "errand",     when: null,        added: new Date().toISOString() }
+    const PRINT_CATALOG = [
+      { id: "p1",  name: "Phone stand — desk",        meta: "PETG black · ~2h"     },
+      { id: "p2",  name: "Panel mount bracket",       meta: "Electric Boyes · ~1h" },
+      { id: "p3",  name: "Cable clips ×20",           meta: "PLA grey · ~3h"       },
+      { id: "p4",  name: "Label maker battery cover", meta: "PLA white · ~45m"     },
+      { id: "p5",  name: "Shop sign — Dynamic Media", meta: "PETG teal · ~6h"      },
+      { id: "p6",  name: "Filament dry box clips",    meta: "PETG · ~1h"           },
+      { id: "p7",  name: "Drill bit organizer",       meta: "PLA red · ~4h"        },
+      { id: "p8",  name: "Key fob — shop logo",       meta: "PLA silk · ~30m"      },
+      { id: "p9",  name: "Outlet cover spacers",      meta: "Electric Boyes · ~1h" },
+      { id: "p10", name: "Headphone wall hook",       meta: "PETG black · ~2h"     }
     ];
 
-    const DEMO_QUEUE = [
-      { id: "q1", name: "Cable clips ×20",        meta: "PLA grey · ~3h",  first: true  },
-      { id: "q2", name: "Phone stand — desk",      meta: "PETG black · ~2h", first: false },
-      { id: "q3", name: "Shop sign — Dynamic Media", meta: "PETG teal · ~6h", first: false }
-    ];
+    /* ==========================================================
+       DOM HANDLES + STATE
+       ========================================================== */
+    const chat    = document.getElementById("chat");
+    const input   = document.getElementById("prompt-input");
+    const reactor = document.getElementById("reactor");
 
-    function loadDemoData() {
-      localStorage.setItem("jarvis.inbox", JSON.stringify(DEMO_INBOX));
-      localStorage.setItem("jarvis.printQueue", JSON.stringify(DEMO_QUEUE));
-      showToast("Demo data loaded. Check Inbox + Today.");
-      document.getElementById("demo-btn").style.display = "none";
-    }
-
-    // Show the demo button ONLY when there's nothing stored yet
-    (function () {
-      const empty = !localStorage.getItem("jarvis.inbox") &&
-                    !localStorage.getItem("jarvis.printQueue");
-      const btn = document.getElementById("demo-btn");
-      if (empty && btn) {
-        btn.style.display = "inline-block";
-        btn.addEventListener("click", loadDemoData);
-      }
-    })();
+    let typing = false;       // don't accept input mid-sentence
+    let picker = null;        // live picker state, or null when no sky is open
 
     /* ==========================================================
-       CARD ROUTER — what happens when you tap a card
-       - View built?  → open its file (e.g. picker.html)
-       - Not built?   → friendly toast, never a broken page
+       JARVIS SPEAKS — types a line into the chat, letter by
+       letter. Returns a Promise so lines can chain in order.
        ========================================================== */
-    document.querySelectorAll(".card").forEach(card => {
-      card.addEventListener("click", () => {
-        const view  = card.dataset.view;                  // e.g. "picker"
-        const ready = card.dataset.ready === "true";      // built yet?
-        const label = card.querySelector(".card-label").textContent;
+    function jarvisSays(text) {
+      return new Promise(resolve => {
+        typing = true;
+        reactor.classList.add("thinking");
 
-        if (ready) {
-          window.location.href = view + ".html";
+        const line = document.createElement("div");
+        line.className = "line-jarvis caret";
+        chat.appendChild(line);
+        scrollChat();
+
+        let i = 0;
+        const tick = setInterval(() => {
+          line.textContent = text.slice(0, ++i);
+          scrollChat();
+          if (i >= text.length) {
+            clearInterval(tick);
+            line.classList.remove("caret");
+            reactor.classList.remove("thinking");
+            typing = false;
+            resolve();
+          }
+        }, TYPE_SPEED);
+      });
+    }
+
+    function youSaid(text) {
+      const line = document.createElement("div");
+      line.className = "line-you";
+      line.innerHTML = '<span class="who">YOU</span>';
+      line.appendChild(document.createTextNode(text));
+      chat.appendChild(line);
+      scrollChat();
+    }
+
+    function scrollChat() {
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    /* ==========================================================
+       THE SKY — bubbles rise inside the chat when asked
+       ========================================================== */
+    function openSky(items) {
+      picker = { phase: "pick", items: [...items], picked: [], el: null };
+
+      const sky = document.createElement("div");
+      sky.className = "sky";
+      chat.appendChild(sky);
+      picker.el = sky;
+
+      picker.items.forEach(item => {
+        const b = document.createElement("div");
+        b.className = "bubble";
+        b.dataset.id = item.id;
+        b.style.setProperty("--delay", (Math.random() * 2).toFixed(2) + "s");
+        b.innerHTML =
+          '<div class="bubble-name"></div><div class="bubble-meta"></div>';
+        b.querySelector(".bubble-name").textContent = item.name;
+        b.querySelector(".bubble-meta").textContent = item.meta;
+        b.addEventListener("click", () => onBubbleTap(item.id));
+        sky.appendChild(b);
+      });
+
+      layoutSky(sky);
+      scrollChat();
+    }
+
+    /* Deal bubbles: picked ones float up into a tidy row,
+       unpicked ones drift loose in the lower sky. */
+    function layoutSky(sky) {
+      const bubbles = sky.querySelectorAll(".bubble:not(.dismissed)");
+      let pickRow = 0, pickCol = 0, restRow = 0, restCol = 0;
+      bubbles.forEach(b => {
+        if (b.classList.contains("picked")) {
+          b.style.setProperty("--x", (5 + pickCol * 48) + "%");
+          b.style.setProperty("--y", (5 + pickRow * 26) + "%");
+          pickCol++; if (pickCol > 1) { pickCol = 0; pickRow++; }
         } else {
-          showToast(label + " — coming soon. One thing at a time.");
+          b.style.setProperty("--x", (5 + restCol * 48) + "%");
+          b.style.setProperty("--y", (34 + restRow * 22) + "%");
+          restCol++; if (restCol > 1) { restCol = 0; restRow++; }
         }
       });
-    });
+    }
+
+    function onBubbleTap(id) {
+      if (!picker) return;
+
+      if (picker.phase === "pick") {
+        const item  = picker.items.find(i => i.id === id);
+        const index = picker.picked.findIndex(p => p.id === id);
+        if (index >= 0) picker.picked.splice(index, 1);
+        else            picker.picked.push(item);
+
+        const bubble = picker.el.querySelector('[data-id="' + id + '"]');
+        bubble.classList.toggle("picked");
+        layoutSky(picker.el);
+      } else if (picker.phase === "chooseFirst") {
+        startWith(picker.picked.find(p => p.id === id));
+      }
+    }
+
+    /* ==========================================================
+       PICKER FLOW — confirm picks → rest drift away → which first?
+       ========================================================== */
+    async function confirmPicks() {
+      if (picker.picked.length === 0) {
+        await jarvisSays("Nothing selected — tap a few bubbles first.");
+        return;
+      }
+
+      // The rest sink, shrink, fade.
+      picker.items.forEach(item => {
+        if (!picker.picked.some(p => p.id === item.id)) {
+          picker.el.querySelector('[data-id="' + item.id + '"]')
+            .classList.add("dismissed");
+        }
+      });
+
+      await new Promise(r => setTimeout(r, 650));   // let them drift
+
+      // Rebuild the sky with only your picks, together up top
+      const survivors = [...picker.picked];
+      picker.el.remove();
+      openSky(survivors);
+      picker.phase = "chooseFirst";
+      picker.items.forEach(i =>
+        picker.el.querySelector('[data-id="' + i.id + '"]')
+          .classList.add("picked"));
+      layoutSky(picker.el);
+
+      await jarvisSays(survivors.length + " it is. Which one first — tap it or name it.");
+    }
+
+    async function startWith(item) {
+      picker.phase = "done";
+
+      const list = picker.picked.map(p => ({ ...p, first: p.id === item.id }));
+      saveJSON("jarvis.printQueue", list);
+
+      // The sky fades out — job done, back to conversation
+      const skyEl = picker.el;
+      skyEl.style.transition = "opacity 0.5s ease";
+      skyEl.style.opacity = "0";
+      setTimeout(() => skyEl.remove(), 550);
+      picker = null;
+
+      await jarvisSays('Starting with "' + item.name + '." Your list of ' +
+                       list.length + " is saved — waiting in Today.");
+    }
+
+    /* ==========================================================
+       INBOX SORTER — same rules as inbox.html
+       ========================================================== */
+    function sortItem(text) {
+      const lower = text.toLowerCase();
+      const timeMatch = lower.match(/\bat\s+(\d{1,2})(:\d{2})?\s*(am|pm)?\b|\b(\d{1,2}:\d{2})\s*(am|pm)?\b/);
+      if (timeMatch) return { bucket: "appointment", when: timeMatch[0].trim() };
+      if (/\b(print|filament|pla|petg|nozzle|gcode)\b/.test(lower))  return { bucket: "print" };
+      if (/\b(project|build|make|design|install)\b/.test(lower))     return { bucket: "project" };
+      if (/\b(pick up|drop off|buy|order|store|take)\b/.test(lower)) return { bucket: "errand" };
+      if (/\b(idea|maybe|what if|someday|could)\b/.test(lower))      return { bucket: "idea" };
+      return { bucket: "task" };
+    }
+
+    /* ==========================================================
+       THE GREETING — he brings your day UP to you
+       ========================================================== */
+    async function greet(askAfter) {
+      const now   = new Date();
+      const hour  = now.getHours();
+      const word  = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+      const inbox = loadJSON("jarvis.inbox", []);
+      const queue = loadJSON("jarvis.printQueue", []);
+      const appts = inbox.filter(i => i.bucket === "appointment");
+
+      let line = word + ", " + NAME + ".";
+      if (appts.length > 0) {
+        line += " You have " + appts.length + " appointment" + (appts.length > 1 ? "s" : "") +
+                " today — first up: " + appts[0].text +
+                (appts[0].when ? " (" + appts[0].when + ")" : "") + ".";
+      }
+      if (queue.length > 0) {
+        line += " " + queue.length + " print" + (queue.length > 1 ? "s are" : " is") + " queued.";
+      }
+      if (appts.length === 0 && queue.length === 0) {
+        line += " Clear day — nothing timed, nothing queued.";
+      }
+      if (askAfter) line += " What would you like to do?";
+
+      await jarvisSays(line);
+    }
+
+    /* ==========================================================
+       INTENT ROUTER — COMMAND / QUESTION / DUMP / UNCLEAR
+       Your rule: unclear → ask, never guess.
+       (Rule-based for now; DeepSeek swaps in later.)
+       ========================================================== */
+    async function route(text) {
+      const lower = text.toLowerCase();
+
+      // --- mid-picker conversation ---
+      if (picker) {
+        if (picker.phase === "pick") {
+          if (/\b(done|that'?s all|those|confirm)\b/.test(lower)) return confirmPicks();
+          if (/\ball\b/.test(lower)) {
+            picker.items.forEach(i => {
+              if (!picker.picked.some(p => p.id === i.id)) picker.picked.push(i);
+              picker.el.querySelector('[data-id="' + i.id + '"]')
+                .classList.add("picked");
+            });
+            layoutSky(picker.el);
+            return jarvisSays("All of them, then. Say done when ready.");
+          }
+          return jarvisSays("Tap the ones you want — or say done.");
+        }
+        if (picker.phase === "chooseFirst") {
+          const num = lower.match(/\b(1st|first|2nd|second|3rd|third|\d+)\b/);
+          let choice = null;
+          if (num) {
+            const n = { "1st": 1, "first": 1, "2nd": 2, "second": 2,
+                        "3rd": 3, "third": 3 }[num[1]] || parseInt(num[1], 10);
+            choice = picker.picked[n - 1];
+          }
+          if (!choice) {
+            choice = picker.picked.find(p =>
+              lower.includes(p.name.toLowerCase().split(" ")[0]));
+          }
+          if (choice) return startWith(choice);
+          return jarvisSays("Which one — tap it, or name it.");
+        }
+      }
+
+      // --- QUESTION: what's on today? ---
+      if (/\b(what('| i)s on|today|appointments?|schedule|my day|briefing)\b/.test(lower)) {
+        return greet(false);
+      }
+
+      // --- COMMAND: show me prints ---
+      if (/\b(show|prints?|print list|pick|choose|queue)\b/.test(lower)) {
+        await jarvisSays("Of course. Here are your prints — tap the ones you want, then say done.");
+        return openSky(PRINT_CATALOG);
+      }
+
+      // --- QUESTION: inbox? ---
+      if (/\binbox\b/.test(lower)) {
+        const inbox = loadJSON("jarvis.inbox", []);
+        return jarvisSays(inbox.length
+          ? "You have " + inbox.length + " items in your inbox. Tap Inbox up top to review them."
+          : "Inbox is empty, " + NAME + ".");
+      }
+
+      // --- DUMP: remember / note / remind me ---
+      if (/\b(remember|note|remind me|add|dump)\b/.test(lower)) {
+        const clean  = text.replace(/^(remember|note|remind me( to)?|add|dump)\s*/i, "");
+        const sorted = sortItem(clean);
+        const inbox  = loadJSON("jarvis.inbox", []);
+        inbox.unshift({
+          id: Date.now().toString(),
+          text: clean,
+          bucket: sorted.bucket,
+          when: sorted.when || null,
+          added: new Date().toISOString()
+        });
+        saveJSON("jarvis.inbox", inbox);
+        return jarvisSays(sorted.when
+          ? 'Filed under Appointments — "' + sorted.when + '" noted. I\'ll bring it up.'
+          : "Noted — filed under " + sorted.bucket + "s.");
+      }
+
+      // --- greetings ---
+      if (/^(hi|hey|hello|morning|afternoon|evening|jarvis)\b/.test(lower)) {
+        return greet(false);
+      }
+
+      // --- UNCLEAR → ask, never guess ---
+      return jarvisSays(
+        'Not sure what you need, ' + NAME + '. Ask "what\'s on today", ' +
+        'say "show me my prints", or tell me to remember something.');
+    }
+
+    /* ==========================================================
+       INPUT WIRING
+       ========================================================== */
+    function send() {
+      const text = input.value.trim();
+      if (!text || typing) return;
+      input.value = "";
+      youSaid(text);
+      route(text);
+    }
+
+    document.getElementById("send-btn").addEventListener("click", send);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+
+    /* ==========================================================
+       OPEN — he speaks first
+       ========================================================== */
+    greet(true);
   </script>
 </body>
 </html>
