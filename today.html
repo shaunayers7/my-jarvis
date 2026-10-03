@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- ============================================================
+       JARVIS — Today View
+       ------------------------------------------------------------
+       Your day at a glance. Two honest sections:
+         1. AT TIMES   — real appointments only (from the Inbox).
+                         Nothing appears here unless it truly has
+                         a time ("Callie at 7").
+         2. PRINT QUEUE — the list you built in the Picker.
+                          Tap a print when it's done.
+
+       The Jarvis line up top gives the morning briefing:
+       "You have 1 appointment and 3 prints queued."
+
+       ONE file: HTML + CSS + JS. No frameworks.
+       Reads localStorage keys: jarvis.inbox, jarvis.printQueue
+       ============================================================ -->
+
+  <meta charset="UTF-8">
+
+  <!-- Fit phone screens, including iPhone notch areas -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+  <!-- iPhone "Add to Home Screen" support -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0a0e14">
+
+  <title>JARVIS — Today</title>
+
+  <style>
+    /* ==========================================================
+       THEME — same variables as the rest of the app
+       ========================================================== */
+    :root {
+      --bg:      #0a0e14;
+      --panel:   #111722;
+      --accent:  #00d4ff;
+      --text:    #e8f1f8;
+      --dim:     #7a8a9e;
+      --good:    #3ddc84;
+      --appt:    #ff5c5c;    /* red: real times only */
+      --glow:    rgba(0, 212, 255, 0.35);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right)
+               env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    /* ==========================================================
+       TOP BAR — back + title (same pattern as the other views)
+       ========================================================== */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 16px 8px;
+    }
+
+    .back {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      background: var(--panel);
+      color: var(--accent);
+      font-size: 1.3rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .back:active {
+      transform: scale(0.92);
+      box-shadow: 0 0 18px var(--glow);
+    }
+
+    .topbar-title {
+      font-size: 1.15rem;
+      letter-spacing: 0.25em;
+      font-weight: 700;
+      color: var(--accent);
+      text-shadow: 0 0 14px var(--glow);
+    }
+
+    .topbar-date {
+      margin-left: auto;         /* pushes date to the right edge */
+      font-size: 0.8rem;
+      color: var(--dim);
+      text-align: right;
+      line-height: 1.3;
+    }
+
+    /* ==========================================================
+       JARVIS LINE — the briefing
+       ========================================================== */
+    .jarvis-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 22px 6px;
+      min-height: 52px;
+    }
+
+    .reactor {
+      flex: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 12px var(--glow);
+      animation: pulse 3s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 6px  var(--glow); opacity: 0.85; }
+      50%      { box-shadow: 0 0 18px var(--glow); opacity: 1;    }
+    }
+
+    #jarvis-text { font-size: 1rem; line-height: 1.4; }
+
+    /* ==========================================================
+       SECTIONS
+       ========================================================== */
+    .sections {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 18px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    .section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title .count {
+      color: var(--accent);
+    }
+
+    /* ---------- appointment rows (red = real times) ---------- */
+    .appt {
+      background: var(--panel);
+      border: 1px solid rgba(255, 92, 92, 0.25);
+      border-left: 3px solid var(--appt);
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+
+    .appt-time {
+      flex: none;
+      min-width: 74px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--appt);
+      letter-spacing: 0.02em;
+    }
+
+    .appt-text {
+      font-size: 0.98rem;
+      line-height: 1.35;
+    }
+
+    /* ---------- print queue rows ---------- */
+    .print {
+      background: var(--panel);
+      border: 1px solid rgba(0, 212, 255, 0.18);
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: opacity 0.35s ease, transform 0.35s ease,
+                  border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .print:active { transform: scale(0.97); }
+
+    /* The one you said you'd start with gets the halo */
+    .print.first {
+      border-color: var(--accent);
+      box-shadow: 0 0 18px var(--glow);
+    }
+
+    /* Tap = done: fades and lifts away, then removed from storage */
+    .print.done {
+      opacity: 0;
+      transform: translateY(-14px) scale(0.96);
+      pointer-events: none;
+    }
+
+    .print-check {
+      flex: none;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 2px solid rgba(0, 212, 255, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: transparent;
+      font-size: 0.9rem;
+      transition: all 0.15s ease;
+    }
+
+    .print:active .print-check {
+      border-color: var(--good);
+      color: var(--good);
+    }
+
+    .print-body { flex: 1; }
+
+    .print-name { font-size: 0.98rem; font-weight: 600; line-height: 1.3; }
+
+    .print-meta { margin-top: 3px; font-size: 0.75rem; color: var(--dim); }
+
+    .start-here {
+      flex: none;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 20px;
+      padding: 3px 9px;
+    }
+
+    /* ---------- empty states ---------- */
+    .empty {
+      color: var(--dim);
+      font-size: 0.9rem;
+      padding: 14px 4px;
+      line-height: 1.5;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reactor { animation: none; }
+      .print   { transition: none; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ===================== TOP BAR ===================== -->
+  <div class="topbar">
+    <a class="back" href="index.html" aria-label="Back to home">←</a>
+    <span class="topbar-title">TODAY</span>
+    <span class="topbar-date" id="today-date"></span>
+  </div>
+
+  <!-- ===================== JARVIS BRIEFING ===================== -->
+  <div class="jarvis-line">
+    <span class="reactor"></span>
+    <span id="jarvis-text">One moment…</span>
+  </div>
+
+  <!-- ===================== THE SECTIONS ===================== -->
+  <div class="sections">
+
+    <!-- Real appointments only. No fake deadlines allowed here. -->
+    <section>
+      <div class="section-title">⏰ At times <span class="count" id="appt-count"></span></div>
+      <div id="appt-list"></div>
+    </section>
+
+    <!-- The queue you built in the Picker -->
+    <section>
+      <div class="section-title">🖨️ Print queue <span class="count" id="print-count"></span></div>
+      <div id="print-list"></div>
+    </section>
+
+  </div>
+
+  <script>
+    /* ==========================================================
+       LOAD — read the two localStorage keys the app already uses
+         jarvis.inbox      ← everything dumped into the Inbox
+         jarvis.printQueue ← the list you picked in the Picker
+       ========================================================== */
+    function loadJSON(key) {
+      try { return JSON.parse(localStorage.getItem(key)) || []; }
+      catch { return []; }
+    }
+
+    let inbox = loadJSON("jarvis.inbox");
+    let queue = loadJSON("jarvis.printQueue");
+
+    // Only appointments belong in the "At times" section —
+    // your rule: nothing gets a time unless it truly has one.
+    let appts = inbox.filter(i => i.bucket === "appointment");
+
+    /* ==========================================================
+       TIME PARSING — turn "at 7", "7:30pm" into sortable minutes.
+       No meridiem typed? We take the hour as-is. Simple + honest.
+       ========================================================== */
+    function toMinutes(when) {
+      if (!when) return 9999;                     // unparseable → bottom
+      const m = when.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+      if (!m) return 9999;
+      let h = parseInt(m[1], 10);
+      const mins = m[2] ? parseInt(m[2], 10) : 0;
+      const mer = (m[3] || "").toLowerCase();
+      if (mer === "pm" && h < 12) h += 12;
+      if (mer === "am" && h === 12) h = 0;
+      return h * 60 + mins;
+    }
+
+    appts.sort((a, b) => toMinutes(a.when) - toMinutes(b.when));
+
+    /* ==========================================================
+       THE BRIEFING — Jarvis brings things UP to you
+       ========================================================== */
+    function jarvisSays(text) {
+      document.getElementById("jarvis-text").textContent = text;
+    }
+
+    function briefing() {
+      const a = appts.length;
+      const p = queue.length;
+
+      if (a === 0 && p === 0) {
+        jarvisSays("Clear day, sir. Nothing timed, nothing queued.");
+        return;
+      }
+
+      const parts = [];
+      if (a > 0) parts.push(a + " appointment" + (a === 1 ? "" : "s"));
+      if (p > 0) parts.push(p + " print" + (p === 1 ? "" : "s") + " queued");
+      jarvisSays("You have " + parts.join(" and ") + " today.");
+    }
+
+    /* ==========================================================
+       RENDER — appointments
+       ========================================================== */
+    function renderAppts() {
+      const list = document.getElementById("appt-list");
+      document.getElementById("appt-count").textContent =
+        appts.length ? "(" + appts.length + ")" : "";
+      list.innerHTML = "";
+
+      if (appts.length === 0) {
+        list.innerHTML = '<div class="empty">Nothing timed today.</div>';
+        return;
+      }
+
+      appts.forEach(item => {
+        const row = document.createElement("div");
+        row.className = "appt";
+        row.innerHTML =
+          '<span class="appt-time"></span>' +
+          '<span class="appt-text"></span>';
+        // "at 7" → "7" shown as the time chip; text is the note itself
+        row.querySelector(".appt-time").textContent =
+          (item.when || "").replace(/^at\s+/i, "");
+        row.querySelector(".appt-text").textContent = item.text;
+        list.appendChild(row);
+      });
+    }
+
+    /* ==========================================================
+       RENDER — print queue (tap = done)
+       ========================================================== */
+    function renderQueue() {
+      const list = document.getElementById("print-list");
+      document.getElementById("print-count").textContent =
+        queue.length ? "(" + queue.length + ")" : "";
+      list.innerHTML = "";
+
+      if (queue.length === 0) {
+        list.innerHTML =
+          '<div class="empty">Nothing queued. Tap Picker on the home screen to choose today\'s prints.</div>';
+        return;
+      }
+
+      queue.forEach(item => {
+        const row = document.createElement("div");
+        row.className = "print" + (item.first ? " first" : "");
+        row.innerHTML =
+          '<span class="print-check">✓</span>' +
+          '<span class="print-body">' +
+            '<span class="print-name"></span>' +
+            (item.meta ? '<div class="print-meta"></div>' : "") +
+          "</span>" +
+          (item.first ? '<span class="start-here">START HERE</span>' : "");
+
+        row.querySelector(".print-name").textContent = item.name;
+        if (item.meta) row.querySelector(".print-meta").textContent = item.meta;
+
+        // Tap a print = it's done. Fade it, remove it, save.
+        row.addEventListener("click", () => {
+          row.classList.add("done");
+          setTimeout(() => {
+            queue = queue.filter(q => q.id !== item.id);
+            localStorage.setItem("jarvis.printQueue", JSON.stringify(queue));
+            renderQueue();
+            if (queue.length > 0) {
+              jarvisSays('"' + item.name + '" done. ' + queue.length + " to go.");
+            } else {
+              jarvisSays("Queue cleared. Well done, sir.");
+            }
+          }, 380);   // wait for the fade-away to finish
+        });
+
+        list.appendChild(row);
+      });
+    }
+
+    /* ==========================================================
+       OPEN
+       ========================================================== */
+    document.getElementById("today-date").textContent =
+      new Date().toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+
+    renderAppts();
+    renderQueue();
+    briefing();
+  </script>
+</body>
+</html>

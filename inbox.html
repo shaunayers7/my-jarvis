@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- ============================================================
+       JARVIS — Inbox
+       ------------------------------------------------------------
+       The dumping ground. Anything on your mind goes in here:
+       ideas, tasks, projects, prints, errands.
+       Jarvis auto-sorts and tags each one. Nothing gets a TIME
+       unless it truly has one ("take Callie at 7").
+
+       ONE file: HTML + CSS + JS. No frameworks.
+       Data: localStorage ("jarvis.inbox"). DeepSeek AI sorting
+       comes later — right now a simple, honest rule-based sorter
+       does the tagging so it works offline for free.
+       ============================================================ -->
+
+  <meta charset="UTF-8">
+
+  <!-- Fit phone screens, including iPhone notch areas -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+  <!-- iPhone "Add to Home Screen" support -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0a0e14">
+
+  <title>JARVIS — Inbox</title>
+
+  <style>
+    /* ==========================================================
+       THEME — same variables as the rest of the app
+       ========================================================== */
+    :root {
+      --bg:      #0a0e14;
+      --panel:   #111722;
+      --accent:  #00d4ff;
+      --text:    #e8f1f8;
+      --dim:     #7a8a9e;
+      --glow:    rgba(0, 212, 255, 0.35);
+
+      /* Tag colours — one per bucket Jarvis sorts into */
+      --c-project: #b28cff;   /* purple */
+      --c-print:   #00d4ff;   /* cyan   */
+      --c-task:    #3ddc84;   /* green  */
+      --c-errand:  #ffb347;   /* amber  */
+      --c-idea:    #ff7ab8;   /* pink   */
+      --c-appt:    #ff5c5c;   /* red — real times only */
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right)
+               env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    /* ==========================================================
+       TOP BAR — back + title (same pattern as picker.html)
+       ========================================================== */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 16px 8px;
+    }
+
+    .back {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      background: var(--panel);
+      color: var(--accent);
+      font-size: 1.3rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .back:active {
+      transform: scale(0.92);
+      box-shadow: 0 0 18px var(--glow);
+    }
+
+    .topbar-title {
+      font-size: 1.15rem;
+      letter-spacing: 0.25em;
+      font-weight: 700;
+      color: var(--accent);
+      text-shadow: 0 0 14px var(--glow);
+    }
+
+    /* ==========================================================
+       JARVIS LINE — one clean line of feedback
+       ========================================================== */
+    .jarvis-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 22px 4px;
+      min-height: 48px;
+    }
+
+    .reactor {
+      flex: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 12px var(--glow);
+      animation: pulse 3s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 6px  var(--glow); opacity: 0.85; }
+      50%      { box-shadow: 0 0 18px var(--glow); opacity: 1;    }
+    }
+
+    #jarvis-text { font-size: 1rem; line-height: 1.35; }
+
+    /* ==========================================================
+       CAPTURE BOX — the most important part: type it, it's in
+       ========================================================== */
+    .capture {
+      display: flex;
+      gap: 10px;
+      padding: 10px 18px 14px;
+    }
+
+    #capture-input {
+      flex: 1;
+      padding: 16px;               /* big touch target */
+      border-radius: 16px;
+      border: 1px solid rgba(0, 212, 255, 0.35);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 1rem;
+      outline: none;
+    }
+
+    #capture-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 16px var(--glow);
+    }
+
+    #capture-input::placeholder { color: var(--dim); }
+
+    .add-btn {
+      width: 58px;
+      border-radius: 16px;
+      border: none;
+      background: var(--accent);
+      color: #04222b;
+      font-size: 1.6rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .add-btn:active {
+      transform: scale(0.93);
+      box-shadow: 0 0 20px var(--glow);
+    }
+
+    /* ==========================================================
+       FILTER CHIPS — "show me just projects / prints / …"
+       ========================================================== */
+    .filters {
+      display: flex;
+      gap: 8px;
+      padding: 0 18px 12px;
+      overflow-x: auto;            /* swipe sideways on small phones */
+      scrollbar-width: none;
+    }
+
+    .filters::-webkit-scrollbar { display: none; }
+
+    .chip {
+      flex: none;
+      padding: 9px 16px;
+      border-radius: 30px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: var(--panel);
+      color: var(--dim);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .chip.on {
+      border-color: var(--accent);
+      color: var(--text);
+      box-shadow: 0 0 12px var(--glow);
+    }
+
+    /* ==========================================================
+       ITEM LIST — everything you've dumped, tagged
+       ========================================================== */
+    .list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 18px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .item {
+      background: var(--panel);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-left: 3px solid var(--tag-color, var(--dim));
+      border-radius: 14px;
+      padding: 14px 16px;
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0);    }
+    }
+
+    .item-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .item-text {
+      flex: 1;
+      font-size: 0.98rem;
+      line-height: 1.35;
+    }
+
+    .tag {
+      flex: none;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tag-color, var(--dim));
+      border: 1px solid var(--tag-color, var(--dim));
+      border-radius: 20px;
+      padding: 3px 10px;
+      margin-top: 2px;
+    }
+
+    .item-meta {
+      margin-top: 6px;
+      font-size: 0.75rem;
+      color: var(--dim);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Red highlight for real times (appointments) */
+    .when { color: var(--c-appt); font-weight: 600; }
+
+    .delete {
+      background: none;
+      border: none;
+      color: var(--dim);
+      font-size: 0.85rem;
+      cursor: pointer;
+      padding: 6px 10px;           /* bigger invisible touch area */
+      margin: -6px -10px -6px 0;
+    }
+
+    .delete:active { color: var(--c-appt); }
+
+    .empty {
+      text-align: center;
+      color: var(--dim);
+      padding: 40px 20px;
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reactor { animation: none; }
+      .item    { animation: none; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ===================== TOP BAR ===================== -->
+  <div class="topbar">
+    <a class="back" href="index.html" aria-label="Back to home">←</a>
+    <span class="topbar-title">INBOX</span>
+  </div>
+
+  <!-- ===================== JARVIS SPEAKS HERE ===================== -->
+  <div class="jarvis-line">
+    <span class="reactor"></span>
+    <span id="jarvis-text">What's on your mind?</span>
+  </div>
+
+  <!-- ===================== CAPTURE ===================== -->
+  <div class="capture">
+    <input id="capture-input" type="text" autocomplete="off"
+           placeholder="Dump it here… e.g. 'project: shop sign' or 'Callie at 7'">
+    <button class="add-btn" id="add-btn" aria-label="Add">+</button>
+  </div>
+
+  <!-- ===================== FILTERS ===================== -->
+  <div class="filters" id="filters"></div>
+
+  <!-- ===================== THE LIST ===================== -->
+  <div class="list" id="list"></div>
+
+  <script>
+    /* ==========================================================
+       THE BUCKETS — how Jarvis sorts your stuff.
+       colour is used for the tag + the left edge of each item.
+       ========================================================== */
+    const BUCKETS = {
+      project:     { label: "Project", colour: "var(--c-project)" },
+      print:       { label: "Print",   colour: "var(--c-print)"   },
+      task:        { label: "Task",    colour: "var(--c-task)"    },
+      errand:      { label: "Errand",  colour: "var(--c-errand)"  },
+      idea:        { label: "Idea",    colour: "var(--c-idea)"    },
+      appointment: { label: "Appt",    colour: "var(--c-appt)"    }
+    };
+
+    /* ==========================================================
+       STORAGE — localStorage step of the data plan.
+       Key: "jarvis.inbox". Everything survives closing the app.
+       ========================================================== */
+    const STORE_KEY = "jarvis.inbox";
+
+    function loadItems() {
+      try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
+      catch { return []; }
+    }
+
+    function saveItems() {
+      localStorage.setItem(STORE_KEY, JSON.stringify(items));
+    }
+
+    let items  = loadItems();
+    let filter = "all";   // which chip is active
+
+    /* ==========================================================
+       THE SORTER — rule-based for now (free, offline).
+       LATER: this one function swaps to a DeepSeek call and
+       nothing else in the app changes.
+       You can also force a bucket by starting with its name:
+       "project: rebuild the van shelving"
+       ========================================================== */
+    function sortItem(text) {
+      const lower = text.toLowerCase();
+
+      // 1) Explicit prefix wins: "print: cable clips"
+      for (const key of Object.keys(BUCKETS)) {
+        if (lower.startsWith(key + ":")) {
+          return { bucket: key, clean: text.slice(key.length + 1).trim() };
+        }
+      }
+
+      // 2) A real time = appointment (the ONLY thing that gets a time)
+      //    matches "at 7", "at 7pm", "7:30", "at 19:00"
+      const timeMatch = lower.match(/\bat\s+(\d{1,2})(:\d{2})?\s*(am|pm)?\b|\b(\d{1,2}:\d{2})\s*(am|pm)?\b/);
+      if (timeMatch) {
+        return { bucket: "appointment", clean: text, when: timeMatch[0].trim() };
+      }
+
+      // 3) Keyword hints per bucket
+      if (/\b(print|filament|pla|petg|layer|nozzle|gcode)\b/.test(lower))  return { bucket: "print",   clean: text };
+      if (/\b(project|build|make|design|install)\b/.test(lower))          return { bucket: "project", clean: text };
+      if (/\b(pick up|drop off|buy|order|callie|store|appointment|take)\b/.test(lower)) return { bucket: "errand", clean: text };
+      if (/\b(idea|maybe|what if|someday|could)\b/.test(lower))           return { bucket: "idea",    clean: text };
+
+      // 4) Default: plain task
+      return { bucket: "task", clean: text };
+    }
+
+    /* ==========================================================
+       ADD — capture it, sort it, save it, say what happened
+       ========================================================== */
+    const input      = document.getElementById("capture-input");
+    const jarvisText = document.getElementById("jarvis-text");
+
+    function jarvisSays(text) { jarvisText.textContent = text; }
+
+    function addItem() {
+      const raw = input.value.trim();
+      if (!raw) return;
+
+      const sorted = sortItem(raw);
+      items.unshift({                    // newest on top
+        id: Date.now().toString(),
+        text: sorted.clean,
+        bucket: sorted.bucket,
+        when: sorted.when || null,       // only appointments get this
+        added: new Date().toISOString()
+      });
+      saveItems();
+      input.value = "";
+      renderList();
+
+      const label = BUCKETS[sorted.bucket].label;
+      jarvisSays(sorted.when
+        ? 'Filed under ' + label + ' — "' + sorted.when + '" noted. I\'ll bring it up.'
+        : "Filed under " + label + ".");
+    }
+
+    /* ==========================================================
+       RENDER — chips + list
+       ========================================================== */
+    const listEl    = document.getElementById("list");
+    const filtersEl = document.getElementById("filters");
+
+    function renderFilters() {
+      const names = ["all", ...Object.keys(BUCKETS)];
+      filtersEl.innerHTML = "";
+      names.forEach(name => {
+        const chip = document.createElement("button");
+        chip.className = "chip" + (filter === name ? " on" : "");
+        chip.textContent = name === "all" ? "All" : BUCKETS[name].label;
+        chip.onclick = () => { filter = name; renderFilters(); renderList(); };
+        filtersEl.appendChild(chip);
+      });
+    }
+
+    function renderList() {
+      const shown = filter === "all" ? items : items.filter(i => i.bucket === filter);
+      listEl.innerHTML = "";
+
+      if (shown.length === 0) {
+        listEl.innerHTML =
+          '<div class="empty">Nothing here yet.<br>Dump whatever\'s on your mind up top —<br>I\'ll sort it for you.</div>';
+        return;
+      }
+
+      shown.forEach(item => {
+        const bucket = BUCKETS[item.bucket];
+        const el = document.createElement("div");
+        el.className = "item";
+        el.style.setProperty("--tag-color", bucket.colour);
+
+        el.innerHTML =
+          '<div class="item-top">' +
+            '<span class="item-text"></span>' +
+            '<span class="tag">' + bucket.label + "</span>" +
+          "</div>" +
+          '<div class="item-meta">' +
+            (item.when ? '<span class="when">⏰ ' + item.when + "</span>" : "<span></span>") +
+            '<button class="delete" aria-label="Delete">✕</button>' +
+          "</div>";
+
+        // set text safely (no HTML injection from your own notes)
+        el.querySelector(".item-text").textContent = item.text;
+        el.querySelector(".delete").onclick = () => {
+          items = items.filter(i => i.id !== item.id);
+          saveItems();
+          renderList();
+          jarvisSays("Removed.");
+        };
+
+        listEl.appendChild(el);
+      });
+    }
+
+    /* ==========================================================
+       WIRE IT UP
+       ========================================================== */
+    document.getElementById("add-btn").addEventListener("click", addItem);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") addItem(); });
+
+    renderFilters();
+    renderList();
+    if (items.length > 0) {
+      jarvisSays("You have " + items.length + " item" + (items.length === 1 ? "" : "s") + " in your inbox.");
+    }
+  </script>
+</body>
+</html>
