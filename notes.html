@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0a0e14">
+  <title>JARVIS - Obsidian Memory</title>
+  <style>
+    :root { --bg: #0a0e14; --panel: #111722; --accent: #00d4ff; --text: #e8f1f8; --dim: #7a8a9e; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+      background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { max-width: 800px; margin: auto; padding-bottom: 28px; }
+    header { display: flex; align-items: center; gap: 16px; padding: 18px 0; }
+    header h1 { font-size: 1.1rem; color: var(--accent); }
+    a { color: var(--accent); }
+    header a { min-height: 44px; display: flex; align-items: center; }
+    section { margin: 14px 0; padding: 18px; border: 1px solid #263749; border-radius: 16px; background: var(--panel); }
+    h2 { font-size: 1.1rem; margin-top: 0; }
+    p { line-height: 1.5; }
+    .hint { color: var(--dim); font-size: 0.9rem; }
+    label { display: block; margin-top: 14px; }
+    input, textarea, select, button { font: inherit; }
+    input:not([type="checkbox"]), textarea, select {
+      width: 100%; padding: 12px; min-height: 48px; margin-top: 6px; border-radius: 10px;
+      border: 1px solid #53677e; color: var(--text); background: var(--bg);
+    }
+    textarea { min-height: 300px; resize: vertical; line-height: 1.5; }
+    input[type="checkbox"] { width: 22px; height: 22px; vertical-align: middle; margin-right: 8px; }
+    .check { display: flex; align-items: center; min-height: 44px; margin-top: 4px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+    button { min-height: 48px; padding: 10px 16px; border-radius: 12px; border: 1px solid var(--accent);
+      background: var(--bg); color: var(--accent); cursor: pointer; }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    #status { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px 0; }
+    #status.error { color: #ff9090; }
+    #note-list { display: flex; flex-direction: column; gap: 10px; max-height: 380px; overflow: auto; margin-top: 12px; }
+    #note-list button { text-align: left; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <main>
+    <header><a id="back" href="index.html">Back</a><h1>OBSIDIAN MEMORY</h1></header>
+    <p class="hint">Your private R2 vault is the source of truth. These are the latest synced
+      Markdown files, not unsynced iPhone edits. Sync Obsidian before and after using Jarvis.</p>
+    <section>
+      <h2>Connect your vault</h2>
+      <form id="connection">
+        <label for="worker-url">Worker URL</label>
+        <input id="worker-url" type="url" required autocomplete="off" autocapitalize="none" spellcheck="false"
+          placeholder="https://my-jarvis-ai.your-name.workers.dev">
+        <label for="token">Connection token (not your DeepSeek API key)</label>
+        <input id="token" type="password" required minlength="32" maxlength="256" autocomplete="off">
+        <div class="actions">
+          <button type="submit">Connect</button>
+          <button type="button" id="disconnect">Disconnect</button>
+        </div>
+      </form>
+      <p class="hint">Only the URL is saved. Token and opened notes stay in this page's memory
+        and are cleared when you leave or refresh. Notes operations do not call DeepSeek.</p>
+    </section>
+    <div id="status" role="status" aria-live="polite">Not connected.</div>
+    <section>
+      <h2>Vault notes</h2>
+      <label for="search">Filter by path or title</label>
+      <input id="search" type="search" placeholder="e.g. Business or filament">
+      <div class="actions">
+        <button id="refresh" type="button" disabled>Refresh list</button>
+        <button id="new-note" type="button" disabled>New Inbox note</button>
+      </div>
+      <div id="note-list"></div>
+    </section>
+    <section id="editor-section" hidden>
+      <h2 id="editor-title">Markdown note</h2>
+      <form id="editor">
+        <label for="note-path">Vault path</label>
+        <input id="note-path" required maxlength="240" spellcheck="false" autocapitalize="none">
+        <label for="content">Markdown</label>
+        <textarea id="content" spellcheck="true"></textarea>
+        <label class="check"><input id="auto-tag" type="checkbox" checked>Add/update automatic area tags</label>
+        <label class="check"><input id="auto-link" type="checkbox" checked>Add/update related-note links</label>
+        <p class="hint">Tags use simple Work / Business / Builds / Personal keywords.
+          Related links match existing note titles. Your frontmatter and manual links are preserved.</p>
+        <div class="actions"><button type="submit">Save Markdown</button></div>
+      </form>
+      <label for="folder">Move an Inbox note to</label>
+      <select id="folder">
+        <option value="">Automatically suggest a folder</option>
+        <option>Work</option><option>Business</option><option>Builds</option><option>Personal</option>
+      </select>
+      <div class="actions"><button id="organize" type="button" disabled>Move from Inbox</button></div>
+      <p class="hint">If the area is unclear, choose a folder. Moving keeps a small redirect
+        Markdown file at the old path, so existing links still work. Save your edit before moving.
+        Jarvis never deletes a note.</p>
+    </section>
+  </main>
+  <script>
+    const el = id => document.getElementById(id);
+    let workerURL = "";
+    let token = "";
+    let notes = [];
+    let current = null;
+    let baseline = "";
+    let baselinePath = "";
+    let busy = false;
+
+    function status(message, error = false) {
+      el("status").textContent = message;
+      el("status").classList.toggle("error", error);
+    }
+    try { el("worker-url").value = localStorage.getItem("jarvis.aiURL") || ""; }
+    catch { status("Browser storage is unavailable. Enter the URL manually.", true); }
+
+    function dirty() {
+      return !el("editor-section").hidden &&
+        (el("content").value !== baseline || el("note-path").value !== baselinePath);
+    }
+    function canLeaveDraft() {
+      return !dirty() || window.confirm("Discard this unsaved draft? Copy it first if you want to keep it.");
+    }
+    function controls() {
+      document.querySelectorAll("button").forEach(button => { button.disabled = busy; });
+      el("refresh").disabled = busy || !token;
+      el("new-note").disabled = busy || !token;
+      el("organize").disabled = busy || !current || !!current.redirect || !current.path.startsWith("Inbox/");
+      el("content").readOnly = busy || !!current?.redirect;
+      el("note-path").readOnly = busy || !!current;
+      el("worker-url").readOnly = busy;
+      el("token").readOnly = busy;
+      el("folder").disabled = busy;
+      el("auto-tag").disabled = busy;
+      el("auto-link").disabled = busy;
+    }
+    async function perform(action) {
+      if (busy) return;
+      busy = true;
+      controls();
+      try { await action(); }
+      catch (error) { console.error("Vault operation failed.", error); status(error.message, true); }
+      finally { busy = false; controls(); }
+    }
+    async function api(path, method = "GET", body) {
+      if (!token) throw new Error("Connect your Worker first.");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      try {
+        const response = await fetch(new URL(path, workerURL), {
+          method,
+          headers: { Authorization: "Bearer " + token, ...(body ? { "Content-Type": "application/json" } : {}) },
+          body: body ? JSON.stringify(body) : undefined,
+          credentials: "omit", redirect: "error", signal: controller.signal
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error((data.error || "Worker error " + response.status) +
+            (data.destination ? "\nDestination to check: " + data.destination : ""));
+        }
+        return data;
+      } catch (error) {
+        if (controller.signal.aborted || error instanceof TypeError || error instanceof SyntaxError) {
+          throw new Error("The Worker response could not be confirmed. Keep your draft, check the URL/origin, and refresh the list before retrying a write.");
+        }
+        throw error;
+      } finally { clearTimeout(timeout); }
+    }
+    async function refresh() {
+      const data = await api("/vault/notes");
+      if (!Array.isArray(data.notes)) throw new Error("Worker returned an invalid note list.");
+      notes = data.notes;
+      renderList();
+    }
+    function renderList() {
+      const query = el("search").value.toLowerCase();
+      el("note-list").replaceChildren();
+      const visible = notes.filter(note => !note.redirect && note.path.toLowerCase().includes(query));
+      for (const note of visible) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = note.path;
+        button.addEventListener("click", () => {
+          if (!busy && canLeaveDraft()) perform(() => openNote(note.path));
+        });
+        el("note-list").appendChild(button);
+      }
+      if (!visible.length) el("note-list").textContent = "No matching notes. Check the sync prefix if the vault should not be empty.";
+    }
+    function showNote(note) {
+      if (typeof note.path !== "string" || typeof note.content !== "string" || typeof note.etag !== "string") {
+        throw new Error("Worker returned an invalid note. Your draft was preserved.");
+      }
+      current = note;
+      baseline = note.content;
+      baselinePath = note.path;
+      el("editor-section").hidden = false;
+      el("editor-title").textContent = note.redirect ? "Moved note - open its destination" : "Markdown note";
+      el("note-path").value = note.path;
+      el("content").value = note.content;
+      el("folder").value = note.folder || "";
+    }
+    async function openNote(path) {
+      const note = await api("/vault/note?path=" + encodeURIComponent(path));
+      showNote(note);
+      status(note.redirect ? "This note moved to " + note.redirect + ". Open that path from the list."
+        : "Opened " + note.path + ". Sync version: " + note.updated);
+    }
+    el("connection").addEventListener("submit", event => {
+      event.preventDefault();
+      if (!canLeaveDraft()) return;
+      return perform(async () => {
+        const url = new URL(el("worker-url").value.trim());
+        const value = el("token").value.trim();
+        if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || url.pathname !== "/") {
+          throw new Error("Use the HTTPS Worker URL, without a path, query, or credentials.");
+        }
+        if (value.length < 32 || value.length > 256 || /\s/.test(value)) throw new Error("Use a 32-256 character token without spaces.");
+        workerURL = url.href;
+        token = value;
+        localStorage.setItem("jarvis.aiURL", workerURL);
+        notes = [];
+        current = null;
+        el("editor-section").hidden = true;
+        el("note-list").replaceChildren();
+        await refresh();
+        status("Vault connected. " + notes.filter(note => !note.redirect).length + " notes available.");
+      });
+    });
+    el("disconnect").addEventListener("click", () => {
+      if (busy || !canLeaveDraft()) return;
+      token = "";
+      notes = [];
+      current = null;
+      baseline = "";
+      el("token").value = "";
+      el("content").value = "";
+      el("note-list").replaceChildren();
+      el("editor-section").hidden = true;
+      status("Disconnected. Token and opened note cleared.");
+      controls();
+    });
+    el("back").addEventListener("click", event => {
+      if ((busy && !window.confirm("An operation is still running. Leave and check its result later?")) ||
+          !canLeaveDraft()) event.preventDefault();
+    });
+    el("refresh").addEventListener("click", () => perform(async () => {
+      await refresh();
+      status("List refreshed. An open draft is preserved; reopen its note to load new content.");
+    }));
+    el("search").addEventListener("input", renderList);
+    el("new-note").addEventListener("click", () => {
+      if (busy || !canLeaveDraft()) return;
+      current = null;
+      baseline = "";
+      baselinePath = "Inbox/Note-" + crypto.randomUUID() + ".md";
+      el("note-path").value = baselinePath;
+      el("content").value = "";
+      el("folder").value = "";
+      el("editor-title").textContent = "New Markdown note";
+      el("editor-section").hidden = false;
+      status("Choose a title/path, write your note, then save.");
+      controls();
+    });
+    el("editor").addEventListener("submit", event => {
+      event.preventDefault();
+      if (current?.redirect) { status("Open the moved note's destination to edit it.", true); return; }
+      return perform(async () => {
+        const path = el("note-path").value.trim();
+        const note = await api("/vault/note", current ? "PUT" : "POST", {
+          path, content: el("content").value, etag: current?.etag,
+          autoTag: el("auto-tag").checked, autoLink: el("auto-link").checked
+        });
+        showNote(note);
+        status("Saved " + note.path + ". Sync Obsidian to pull it onto your iPhone.");
+        // Don't misreport a confirmed save as failed if only the list refresh fails.
+        try { await refresh(); }
+        catch (error) { status("Saved " + note.path + ", but the list could not refresh: " + error.message, true); }
+      });
+    });
+    el("organize").addEventListener("click", () => {
+      if (!current || current.redirect) return;
+      if (dirty()) { status("Save your draft before moving this note.", true); return; }
+      return perform(async () => {
+        const note = await api("/vault/organize", "POST", {
+          path: current.path, etag: current.etag, folder: el("folder").value
+        });
+        showNote(note);
+        status("Moved to " + note.path + ". A redirect remains in Inbox. Sync Obsidian to pull the change.");
+        try { await refresh(); }
+        catch (error) { status("Moved to " + note.path + ", but the list could not refresh: " + error.message, true); }
+      });
+    });
+    window.addEventListener("beforeunload", event => {
+      if (busy || dirty()) { event.preventDefault(); event.returnValue = ""; }
+    });
+    controls();
+  </script>
+</body>
+</html>

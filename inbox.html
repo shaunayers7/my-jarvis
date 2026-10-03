@@ -4,15 +4,12 @@
   <!-- ============================================================
        JARVIS — Inbox
        ------------------------------------------------------------
-       The dumping ground. Anything on your mind goes in here:
-       ideas, tasks, projects, prints, errands.
-       Jarvis auto-sorts and tags each one. Nothing gets a TIME
-       unless it truly has one ("take Callie at 7").
+       Legacy local task Inbox. New notes belong in the Obsidian
+       vault through notes.html; existing tasks remain available.
 
        ONE file: HTML + CSS + JS. No frameworks.
-       Data: localStorage ("jarvis.inbox"). DeepSeek AI sorting
-       comes later — right now a simple, honest rule-based sorter
-       does the tagging so it works offline for free.
+       Data: legacy localStorage ("jarvis.inbox"), retained so
+       old tasks are not lost. New captures use the vault.
        ============================================================ -->
 
   <meta charset="UTF-8">
@@ -303,20 +300,19 @@
   <!-- ===================== TOP BAR ===================== -->
   <div class="topbar">
     <a class="back" href="index.html" aria-label="Back to home">←</a>
-    <span class="topbar-title">INBOX</span>
+    <span class="topbar-title">LEGACY INBOX</span>
   </div>
 
   <!-- ===================== JARVIS SPEAKS HERE ===================== -->
   <div class="jarvis-line">
     <span class="reactor"></span>
-    <span id="jarvis-text">What's on your mind?</span>
+    <span id="jarvis-text">Existing local tasks. New notes belong in the vault.</span>
   </div>
 
   <!-- ===================== CAPTURE ===================== -->
   <div class="capture">
-    <input id="capture-input" type="text" autocomplete="off"
-           placeholder="Dump it here… e.g. 'project: shop sign' or 'Callie at 7'">
-    <button class="add-btn" id="add-btn" aria-label="Add">+</button>
+    <p style="line-height:1.5;">Existing local tasks are kept here. New personal notes live in
+      Obsidian, not a second browser database. <a href="notes.html" style="color:var(--accent);">Open vault Notes</a>.</p>
   </div>
 
   <!-- ===================== FILTERS ===================== -->
@@ -358,68 +354,11 @@
     let filter = "all";   // which chip is active
 
     /* ==========================================================
-       THE SORTER — rule-based for now (free, offline).
-       LATER: this one function swaps to a DeepSeek call and
-       nothing else in the app changes.
-       You can also force a bucket by starting with its name:
-       "project: rebuild the van shelving"
+       Existing task feedback
        ========================================================== */
-    function sortItem(text) {
-      const lower = text.toLowerCase();
-
-      // 1) Explicit prefix wins: "print: cable clips"
-      for (const key of Object.keys(BUCKETS)) {
-        if (lower.startsWith(key + ":")) {
-          return { bucket: key, clean: text.slice(key.length + 1).trim() };
-        }
-      }
-
-      // 2) A real time = appointment (the ONLY thing that gets a time)
-      //    matches "at 7", "at 7pm", "7:30", "at 19:00"
-      const timeMatch = lower.match(/\bat\s+(\d{1,2})(:\d{2})?\s*(am|pm)?\b|\b(\d{1,2}:\d{2})\s*(am|pm)?\b/);
-      if (timeMatch) {
-        return { bucket: "appointment", clean: text, when: timeMatch[0].trim() };
-      }
-
-      // 3) Keyword hints per bucket
-      if (/\b(print|filament|pla|petg|layer|nozzle|gcode)\b/.test(lower))  return { bucket: "print",   clean: text };
-      if (/\b(project|build|make|design|install)\b/.test(lower))          return { bucket: "project", clean: text };
-      if (/\b(pick up|drop off|buy|order|callie|store|appointment|take)\b/.test(lower)) return { bucket: "errand", clean: text };
-      if (/\b(idea|maybe|what if|someday|could)\b/.test(lower))           return { bucket: "idea",    clean: text };
-
-      // 4) Default: plain task
-      return { bucket: "task", clean: text };
-    }
-
-    /* ==========================================================
-       ADD — capture it, sort it, save it, say what happened
-       ========================================================== */
-    const input      = document.getElementById("capture-input");
     const jarvisText = document.getElementById("jarvis-text");
 
     function jarvisSays(text) { jarvisText.textContent = text; }
-
-    function addItem() {
-      const raw = input.value.trim();
-      if (!raw) return;
-
-      const sorted = sortItem(raw);
-      items.unshift({                    // newest on top
-        id: Date.now().toString(),
-        text: sorted.clean,
-        bucket: sorted.bucket,
-        when: sorted.when || null,       // only appointments get this
-        added: new Date().toISOString()
-      });
-      saveItems();
-      input.value = "";
-      renderList();
-
-      const label = BUCKETS[sorted.bucket].label;
-      jarvisSays(sorted.when
-        ? 'Filed under ' + label + ' — "' + sorted.when + '" noted. I\'ll bring it up.'
-        : "Filed under " + label + ".");
-    }
 
     /* ==========================================================
        RENDER — chips + list
@@ -481,9 +420,6 @@
     /* ==========================================================
        WIRE IT UP
        ========================================================== */
-    document.getElementById("add-btn").addEventListener("click", addItem);
-    input.addEventListener("keydown", e => { if (e.key === "Enter") addItem(); });
-
     renderFilters();
     renderList();
     if (items.length > 0) {

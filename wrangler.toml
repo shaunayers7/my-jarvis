@@ -1,0 +1,15 @@
+name = "my-jarvis-ai"
+main = "deepseek-worker.mjs"
+compatibility_date = "2026-10-03"
+workers_dev = true
+
+[vars]
+# Change this to the exact origin where you open Jarvis (no path or trailing slash).
+ALLOWED_ORIGIN = "https://shaunayers7.github.io"
+VAULT_PREFIX = ""
+
+# Set DEEPSEEK_API_KEY and JARVIS_TOKEN as Worker secrets, never in this file.
+
+[[r2_buckets]]
+binding = "VAULT"
+bucket_name = "my-jarvis-vault"

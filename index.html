@@ -11,11 +11,12 @@
            appear in a centered column — tap your picks, pause
            three seconds, then he asks which to start with.
 
-       He greets you with your day brought UP: appointments from
-       the Inbox, your print queue from the Picker.
+       Obsidian Markdown synced to private R2 is primary memory.
+       Explicit captures write vault notes; AI reads current excerpts.
+       The greeting still includes legacy tasks and the local print queue.
 
        The old card dashboard still exists as dashboard.html
-       (linked up top as "Cards"), along with today/inbox views.
+       (linked up top as "Cards"), along with Today and vault Notes.
 
        ONE file: HTML + CSS + JS. No frameworks.
        ============================================================ -->
@@ -129,6 +130,47 @@
       border-color: var(--accent);
     }
 
+    .ai-button {
+      min-height: 44px;
+      padding: 8px 12px;
+      border: 1px solid var(--accent);
+      border-radius: 20px;
+      background: var(--panel);
+      color: var(--accent);
+      cursor: pointer;
+    }
+
+    .ai-status { padding: 0 18px 6px; color: var(--dim); font-size: 0.8rem; }
+    dialog {
+      width: min(92vw, 460px);
+      max-height: 85dvh;
+      overflow-y: auto;
+      margin: auto;
+      padding: 22px;
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--accent);
+      border-radius: 18px;
+    }
+    dialog::backdrop { background: rgba(0, 0, 0, 0.7); }
+    dialog h2 { margin-bottom: 12px; }
+    dialog p { margin: 12px 0; line-height: 1.45; }
+    dialog label { display: block; margin-top: 16px; }
+    dialog input {
+      width: 100%;
+      min-height: 48px;
+      margin-top: 6px;
+      padding: 12px;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--dim);
+      border-radius: 10px;
+      font-size: 1rem;
+    }
+    .ai-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+    #ai-error { color: var(--appt); }
+    .send-btn:disabled { opacity: 0.5; cursor: wait; }
+
     /* ==========================================================
        CHAT — the conversation scroll area
        ========================================================== */
@@ -158,7 +200,7 @@
       animation: rise 0.32s var(--settle);
     }
 
-    .line-copy, .line-typing { grid-area: 1 / 1; min-width: 0; overflow-wrap: anywhere; }
+    .line-copy, .line-typing { grid-area: 1 / 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
     .line-copy { visibility: hidden; }
 
     @keyframes rise {
@@ -295,17 +337,46 @@
     <span class="wordmark">JARVIS</span>
     <nav class="topbar-links">
       <a href="today.html">Today</a>
-      <a href="inbox.html">Inbox</a>
+      <a href="notes.html">Notes</a>
       <a href="dashboard.html">Cards</a>
+      <button class="ai-button" id="ai-settings-btn" type="button">AI</button>
     </nav>
   </div>
+  <div class="ai-status" id="ai-status" role="status" aria-live="polite">AI not connected</div>
+
+  <dialog id="ai-settings" aria-labelledby="ai-title">
+    <form id="ai-form">
+      <h2 id="ai-title">Connect DeepSeek</h2>
+      <p>Your API key stays in your Cloudflare Worker. Enter its URL and your
+         separate connection token here, not your DeepSeek API key.</p>
+      <p>Obsidian is your primary memory. The Worker reads relevant Markdown
+         from your private synced R2 vault for AI questions, along with your
+         legacy task Inbox, print queue and up to six recent AI exchanges.
+         DeepSeek receives selected note excerpts, not just titles.</p>
+      <p>Messages starting with "remember" save Markdown to the vault's Inbox,
+         not browser storage. Notes can read, edit and organize your vault without
+         calling DeepSeek. Sync Obsidian before and after making changes.</p>
+      <label for="ai-url">Worker URL</label>
+      <input id="ai-url" type="url" placeholder="https://my-jarvis-ai.your-name.workers.dev"
+             required autocomplete="off" autocapitalize="none" spellcheck="false">
+      <label for="ai-token">Connection token (cleared on refresh)</label>
+      <input id="ai-token" type="password" required minlength="32" maxlength="256"
+             autocomplete="off">
+      <p id="ai-error" role="alert"></p>
+      <div class="ai-actions">
+        <button class="ai-button" type="submit">Enable AI</button>
+        <button class="ai-button" id="ai-disconnect" type="button">Disconnect</button>
+        <button class="ai-button" id="ai-close" type="button">Close</button>
+      </div>
+    </form>
+  </dialog>
 
   <!-- ===================== CONVERSATION ===================== -->
   <div class="chat" id="chat"></div>
 
   <!-- ===================== PROMPT ===================== -->
   <div class="prompt">
-    <input id="prompt-input" type="text" autocomplete="off"
+    <input id="prompt-input" type="text" autocomplete="off" maxlength="4000" aria-label="Message to Jarvis"
            placeholder='Talk to me… try "show me my prints"'>
     <button class="send-btn" id="send-btn" aria-label="Send">↑</button>
   </div>
@@ -355,6 +426,175 @@
 
     let typing = false;       // don't accept input mid-sentence
     let picker = null;        // live picker state, or null when no sky is open
+    let sending = false;
+    let aiToken = "";         // Never persist the connection token or API key.
+    let aiHistory = [];
+    let aiURL = "";
+    let pendingCapture = null;
+    const aiStatus = document.getElementById("ai-status");
+    const aiDialog = document.getElementById("ai-settings");
+    const aiError = document.getElementById("ai-error");
+    try {
+      aiURL = localStorage.getItem("jarvis.aiURL") || "";
+    } catch (error) {
+      console.error("Could not read Jarvis AI settings.", error);
+      aiError.textContent = "Browser storage is unavailable. Connection settings cannot be saved.";
+    }
+
+    function updateAIStatus() {
+      aiStatus.textContent = aiToken ? "AI enabled - not yet verified"
+        : aiURL ? "AI locked - open AI to enter your token" : "AI not connected";
+    }
+    updateAIStatus();
+
+    document.getElementById("ai-settings-btn").addEventListener("click", () => {
+      document.getElementById("ai-url").value = aiURL;
+      document.getElementById("ai-token").value = aiToken;
+      aiDialog.showModal();
+    });
+    document.getElementById("ai-close").addEventListener("click", () => aiDialog.close());
+    document.getElementById("ai-form").addEventListener("submit", event => {
+      event.preventDefault();
+      try {
+        const url = new URL(document.getElementById("ai-url").value.trim());
+        const token = document.getElementById("ai-token").value.trim();
+        if (url.protocol !== "https:" || url.username || url.password ||
+            url.search || url.hash || url.pathname !== "/") {
+          throw new Error("Use the HTTPS Worker URL only, without a path, query, or credentials.");
+        }
+        if (token.length < 32 || token.length > 256 || /\s/.test(token)) {
+          throw new Error("Use a connection token of 32-256 characters without spaces.");
+        }
+        localStorage.setItem("jarvis.aiURL", url.href);
+        aiURL = url.href;
+        aiToken = token;
+        aiHistory = [];
+        aiError.textContent = "";
+        updateAIStatus();
+        aiDialog.close();
+      } catch (error) {
+        aiError.textContent = error.message;
+      }
+    });
+    document.getElementById("ai-disconnect").addEventListener("click", () => {
+      aiToken = "";
+      aiHistory = [];
+      document.getElementById("ai-token").value = "";
+      updateAIStatus();
+      aiDialog.close();
+    });
+
+    async function vaultRequest(path, method = "GET", data) {
+      if (!aiURL || !aiToken) throw new Error("Connect your Worker using AI up top. Vault notes are not saved locally.");
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+      try {
+        const response = await fetch(new URL(path, aiURL), {
+          method,
+          headers: { Authorization: "Bearer " + aiToken, ...(data ? { "Content-Type": "application/json" } : {}) },
+          body: data ? JSON.stringify(data) : undefined,
+          credentials: "omit", redirect: "error", signal: controller.signal
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Vault Worker error " + response.status);
+        return result;
+      } catch (error) {
+        if (controller.signal.aborted || error instanceof TypeError || error instanceof SyntaxError) {
+          throw new Error("Vault response could not be confirmed. Your message will be returned to the box. Check Notes before retrying; it may already have saved.");
+        }
+        throw error;
+      } finally { clearTimeout(timer); }
+    }
+
+    async function rememberInVault(text) {
+      const title = text.split("\n")[0].replace(/[\\/:*?"<>|#^[\]\u0000-\u001f\u007f]/g, " ").trim().slice(0, 70) || "Note";
+      // Reuse the same path if a response is lost, so a retry cannot duplicate it.
+      if (!pendingCapture || pendingCapture.text !== text) {
+        pendingCapture = { text, path: "Inbox/" + title + "-" + crypto.randomUUID() + ".md" };
+      }
+      const saved = await vaultRequest("/vault/note", "POST", {
+        path: pendingCapture.path, content: "# " + title + "\n\n" + text + "\n",
+        autoTag: true, autoLink: true
+      });
+      if (typeof saved.path !== "string" || typeof saved.etag !== "string") {
+        throw new Error("Vault returned an invalid save confirmation. Check Notes before retrying.");
+      }
+      pendingCapture = null;
+      aiStatus.textContent = "Vault connected";
+      return jarvisSays("Saved in Obsidian: " + saved.path + ". Sync Obsidian to pull it onto your iPhone. No notification was scheduled.");
+    }
+
+    async function askDeepSeek(text) {
+      if (!aiURL || !aiToken) {
+        throw new Error("DeepSeek is not connected. Open AI up top to enter your Worker URL and connection token. The Picker still works locally; notes require the vault connection.");
+      }
+      // Read memory fresh so changes made in Inbox and Today are included.
+      const readMemory = key => {
+        let value;
+        try {
+          const raw = localStorage.getItem(key);
+          value = raw === null ? [] : JSON.parse(raw);
+        } catch {
+          throw new Error("Could not read saved memory: " + key + ". Check browser storage and saved data. Nothing was sent.");
+        }
+        if (!Array.isArray(value)) throw new Error("Saved memory is invalid: " + key + ". Nothing was sent.");
+        return value;
+      };
+      const body = JSON.stringify({
+        message: text,
+        history: aiHistory,
+        context: {
+          inbox: readMemory("jarvis.inbox"),
+          printQueue: readMemory("jarvis.printQueue"),
+          printCatalog: PRINT_CATALOG,
+          localDate: new Date().toLocaleString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        }
+      });
+      if (new TextEncoder().encode(body).byteLength > 200000) {
+        throw new Error("Saved memory is too large for this connection. Nothing was sent.");
+      }
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 55000);
+      aiStatus.textContent = "Asking DeepSeek...";
+      reactor.classList.add("thinking");
+      let response;
+      let result;
+      try {
+        response = await fetch(aiURL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + aiToken },
+          body,
+          signal: controller.signal,
+          credentials: "omit",
+          redirect: "error"
+        });
+        result = await response.json();
+      } catch (error) {
+        console.error("Jarvis AI request failed.", error);
+        throw new Error(controller.signal.aborted
+          ? "DeepSeek took too long. Your message is back in the box so you can retry."
+          : "Could not reach the AI Worker. Check its URL, internet connection, and ALLOWED_ORIGIN setting.");
+      } finally {
+        clearTimeout(timer);
+        reactor.classList.remove("thinking");
+      }
+      if (!response.ok) {
+        throw new Error(typeof result?.error === "string" ? result.error : "AI Worker returned an error (" + response.status + ").");
+      }
+      if (typeof result?.reply !== "string" || !result.reply.trim() || result.reply.length > 8000) {
+        throw new Error("AI Worker returned an invalid answer. Please retry.");
+      }
+      aiHistory = [...aiHistory, { role: "user", content: text },
+        { role: "assistant", content: result.reply }].slice(-12);
+      const memory = result.memory;
+      aiStatus.textContent = memory && Array.isArray(memory.sources)
+        ? "DeepSeek connected - " + memory.sources.length + " vault sources (" + memory.scannedNotes + "/" + memory.totalNotes + " notes scanned)" +
+          (Array.isArray(memory.skippedLargeNotes) && memory.skippedLargeNotes.length
+            ? " - " + memory.skippedLargeNotes.length + " oversized notes skipped" : "")
+        : "DeepSeek connected";
+      return jarvisSays(result.reply);
+    }
 
     function reduceMotion() {
       return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -447,8 +687,10 @@
         }
 
         let i = 0;
+        const step = Math.max(1, Math.ceil(text.length / 180));
         const tick = setInterval(() => {
-          spoken.textContent = text.slice(0, ++i);
+          i += step;
+          spoken.textContent = text.slice(0, i);
           if (i >= text.length) {
             clearInterval(tick);
             spoken.classList.remove("caret");
@@ -565,20 +807,6 @@
     }
 
     /* ==========================================================
-       INBOX SORTER — same rules as inbox.html
-       ========================================================== */
-    function sortItem(text) {
-      const lower = text.toLowerCase();
-      const timeMatch = lower.match(/\bat\s+(\d{1,2})(:\d{2})?\s*(am|pm)?\b|\b(\d{1,2}:\d{2})\s*(am|pm)?\b/);
-      if (timeMatch) return { bucket: "appointment", when: timeMatch[0].trim() };
-      if (/\b(print|filament|pla|petg|nozzle|gcode)\b/.test(lower))  return { bucket: "print" };
-      if (/\b(project|build|make|design|install)\b/.test(lower))     return { bucket: "project" };
-      if (/\b(pick up|drop off|buy|order|store|take)\b/.test(lower)) return { bucket: "errand" };
-      if (/\b(idea|maybe|what if|someday|could)\b/.test(lower))      return { bucket: "idea" };
-      return { bucket: "task" };
-    }
-
-    /* ==========================================================
        THE GREETING — he brings your day UP to you
        ========================================================== */
     async function greet(askAfter) {
@@ -591,15 +819,15 @@
 
       let line = word + ", " + NAME + ".";
       if (appts.length > 0) {
-        line += " You have " + appts.length + " appointment" + (appts.length > 1 ? "s" : "") +
-                " today — first up: " + appts[0].text +
+        line += " Your legacy task Inbox has " + appts.length + " appointment" + (appts.length > 1 ? "s" : "") +
+                " (dates not verified) — first listed: " + appts[0].text +
                 (appts[0].when ? " (" + appts[0].when + ")" : "") + ".";
       }
       if (queue.length > 0) {
         line += " " + queue.length + " print" + (queue.length > 1 ? "s are" : " is") + " queued.";
       }
       if (appts.length === 0 && queue.length === 0) {
-        line += " Clear day — nothing timed, nothing queued.";
+        line += " Your memory lives in Obsidian. Open Notes, or connect AI and ask me about it.";
       }
       if (askAfter) line += " What would you like to do?";
 
@@ -607,9 +835,7 @@
     }
 
     /* ==========================================================
-       INTENT ROUTER — COMMAND / QUESTION / DUMP / UNCLEAR
-       Your rule: unclear → ask, never guess.
-       (Rule-based for now; DeepSeek swaps in later.)
+       Picker stays local; explicit saves write Markdown; other text goes to AI.
        ========================================================== */
     async function route(text) {
       const lower = text.toLowerCase();
@@ -649,62 +875,58 @@
         }
       }
 
-      // --- QUESTION: what's on today? ---
-      if (/\b(what('| i)s on|today|appointments?|schedule|my day|briefing)\b/.test(lower)) {
-        return greet(false);
+      // --- DUMP: remember / note / remind me ---
+      if (/^(remember|note|remind me|add|dump)\b/i.test(text)) {
+        const clean  = text.replace(/^(remember|note|remind me( to)?|add|dump)\b[\s:,-]*/i, "").trim();
+        if (!clean) return jarvisSays("What would you like me to remember?");
+        return rememberInVault(clean);
       }
 
-      // --- COMMAND: show me prints ---
-      if (/\b(show|prints?|print list|pick|choose|queue)\b/.test(lower)) {
+      if (/^(what['’]s on today|what is on today|today|appointments|schedule|my day|briefing|show (me )?(my )?(day|schedule))[\s?!.]*$/.test(lower)) {
+        return greet(false);
+      }
+      if (/^(show|list|pick|choose)\s+(me\s+)?(my\s+|some\s+|the\s+)?prints?(\s+(list|queue))?[\s?!.]*$/.test(lower) ||
+          /^(prints?|print list|queue)[\s?!.]*$/.test(lower)) {
         await jarvisSays("Of course. Tap your prints. After a 3-second pause, I'll line up your picks. You can also say done.");
         return openSky(PRINT_CATALOG);
       }
-
-      // --- QUESTION: inbox? ---
-      if (/\binbox\b/.test(lower)) {
-        const inbox = loadJSON("jarvis.inbox", []);
-        return jarvisSays(inbox.length
-          ? "You have " + inbox.length + " items in your inbox. Tap Inbox up top to review them."
-          : "Inbox is empty, " + NAME + ".");
-      }
-
-      // --- DUMP: remember / note / remind me ---
-      if (/\b(remember|note|remind me|add|dump)\b/.test(lower)) {
-        const clean  = text.replace(/^(remember|note|remind me( to)?|add|dump)\s*/i, "");
-        const sorted = sortItem(clean);
-        const inbox  = loadJSON("jarvis.inbox", []);
-        inbox.unshift({
-          id: Date.now().toString(),
-          text: clean,
-          bucket: sorted.bucket,
-          when: sorted.when || null,
-          added: new Date().toISOString()
-        });
-        saveJSON("jarvis.inbox", inbox);
-        return jarvisSays(sorted.when
-          ? 'Filed under Appointments — "' + sorted.when + '" noted. I\'ll bring it up.'
-          : "Noted — filed under " + sorted.bucket + "s.");
+      if (/^(inbox|show (me )?(my )?inbox)[\s?!.]*$/.test(lower)) {
+        const result = await vaultRequest("/vault/notes");
+        if (!Array.isArray(result.notes)) throw new Error("Vault returned an invalid note list.");
+        const count = result.notes.filter(note => note.path.startsWith("Inbox/") && !note.redirect).length;
+        return jarvisSays("Your Obsidian Inbox has " + count + " notes. Open Notes to read or organize them.");
       }
 
       // --- greetings ---
-      if (/^(hi|hey|hello|morning|afternoon|evening|jarvis)\b/.test(lower)) {
+      if (/^(hi|hey|hello|morning|afternoon|evening|jarvis)[\s?!.]*$/.test(lower)) {
         return greet(false);
       }
 
-      // --- UNCLEAR → ask, never guess ---
-      return jarvisSays(
-        'Not sure what you need, ' + NAME + '. Ask "what\'s on today", ' +
-        'say "show me my prints", or tell me to remember something.');
+      return askDeepSeek(text);
     }
 
     /* ==========================================================
        INPUT WIRING
        ========================================================== */
-    function send() {
+    async function send() {
       const text = input.value.trim();
-      if (!text || typing) return;
+      if (!text || typing || sending) return;
+      sending = true;
+      document.getElementById("send-btn").disabled = true;
+      document.getElementById("ai-settings-btn").disabled = true;
       input.value = "";
-      route(text);
+      try {
+        await route(text);
+      } catch (error) {
+        console.error("Jarvis could not complete the message.", error);
+        aiStatus.textContent = "Message failed - check Notes before retrying a save";
+        if (!input.value) input.value = text;
+        await jarvisSays(error.message || "Could not complete your message. Please retry.");
+      } finally {
+        sending = false;
+        document.getElementById("send-btn").disabled = false;
+        document.getElementById("ai-settings-btn").disabled = false;
+      }
     }
 
     document.getElementById("send-btn").addEventListener("click", send);
