@@ -17,7 +17,9 @@ a second brain personal assistant
 ## Conversation and motion
 
 - The conversation shows Jarvis's responses only, not copies of your prompts.
-- Cards float upward while fading in over 800ms, into a centered column.
+- Separate cards appear from top to bottom, with no enclosing box. Each card
+  gently rises and fades in over 700ms, starting 180ms after the previous card.
+  Cards become tappable once their entrance finishes.
   Long suggestion lists scroll inside the card area instead of overflowing.
 - Unpicked cards fade out over 500ms; selected cards stay visible and gently
   glide to the top over 900ms. They never fade out and reappear.

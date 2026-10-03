@@ -317,12 +317,19 @@
 
     function revealCards(sky) {
       if (reduceMotion() || !Element.prototype.animate) return;
-      sky.querySelectorAll(".bubble").forEach(card => {
-        card.animate(
-          [{ opacity: 0, transform: "translateY(32px)" },
+      sky.querySelectorAll(".bubble").forEach((card, index) => {
+        card.disabled = true;
+        const entrance = card.animate(
+          [{ opacity: 0, transform: "translateY(18px)" },
            { opacity: 1, transform: "translateY(0)" }],
-          { duration: 800, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+          {
+            duration: 700, delay: index * 180, fill: "backwards",
+            easing: "cubic-bezier(0.22, 1, 0.36, 1)"
+          }
         );
+        entrance.onfinish = () => {
+          if (!sky.classList.contains("settling")) card.disabled = false;
+        };
       });
     }
 
@@ -331,8 +338,9 @@
       const remaining = cards.filter(card => selected.some(item => item.id === card.dataset.id));
       const dismissed = cards.filter(card => !remaining.includes(card));
       const animated = !reduceMotion() && Boolean(Element.prototype.animate);
-      cards.forEach(card => { card.disabled = true; });
+      sky.classList.add("settling");
       if (animated) cards.forEach(card => card.getAnimations().forEach(animation => animation.finish()));
+      cards.forEach(card => { card.disabled = true; });
 
       await fadeElements(dismissed, 1, 0, 500);
       const first = remaining.map(card => card.getBoundingClientRect());
@@ -351,6 +359,7 @@
           { duration: 900, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
         ).finished));
       }
+      sky.classList.remove("settling");
       remaining.forEach(card => { card.disabled = false; });
     }
 
