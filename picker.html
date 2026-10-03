@@ -4,9 +4,9 @@
   <!-- ============================================================
        JARVIS — Picker View
        ------------------------------------------------------------
-       "Show me my prints" → items appear as bubbles.
-       Tap the ones you want → the rest drift away,
-       your picks float up together, and Jarvis asks
+       Items appear in a centered column.
+       Tap the ones you want → pause three seconds,
+       the rest fade away, and Jarvis asks
        which one to start with. Your choices land on a list.
 
        ONE file: HTML + CSS + JS. No frameworks.
@@ -38,6 +38,7 @@
       --dim:     #7a8a9e;
       --good:    #3ddc84;
       --glow:    rgba(0, 212, 255, 0.35);
+      --settle:  cubic-bezier(0.22, 1, 0.36, 1);
     }
 
     * {
@@ -130,69 +131,65 @@
     }
 
     /* ==========================================================
-       SKY — where the bubbles float
+       CARD LIST — normal flow keeps every card separated
        ========================================================== */
     .sky {
-      flex: 1;
-      position: relative;
-      overflow: hidden;           /* dismissed bubbles fly off-screen */
-      margin: 8px 0;
+      flex: none;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-content: start;
+      gap: 16px;
+      width: 100%;
+      max-width: 520px;
+      margin: 8px auto;
+      padding: 16px 20px;
+      animation: reveal 0.36s var(--settle);
+    }
+
+    @keyframes reveal {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
 
     /* Each bubble = one item you can pick */
     .bubble {
-      position: absolute;
-      left: var(--x);             /* set by JS: spot in the sky */
-      top:  var(--y);
+      width: 100%;
+      min-width: 0;
+      min-height: 64px;
+      text-align: left;
+      font: inherit;
+      color: var(--text);
+      overflow-wrap: anywhere;
       background: var(--panel);
       border: 1px solid rgba(0, 212, 255, 0.25);
       border-radius: 18px;
       padding: 14px 16px;
-      min-width: 150px;
-      max-width: 200px;
       cursor: pointer;
-      /* Gentle floating idle animation, staggered per bubble */
-      animation: bob 4s ease-in-out infinite;
-      animation-delay: var(--delay);
-      transition: left 0.6s cubic-bezier(.22,1,.36,1),
-                  top  0.6s cubic-bezier(.22,1,.36,1),
-                  transform 0.5s ease, opacity 0.5s ease,
-                  border-color 0.2s ease, box-shadow 0.2s ease;
+      transition: opacity 0.24s ease,
+                  background-color 0.18s ease-out,
+                  border-color 0.18s ease-out, box-shadow 0.18s ease-out;
     }
 
-    @keyframes bob {
-      0%, 100% { transform: translateY(0);    }
-      50%      { transform: translateY(-6px); }
-    }
-
-    .bubble:active { transform: scale(0.95); }
+    .bubble:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
     .bubble-name {
-      font-size: 0.95rem;
+      font-size: 1rem;
       font-weight: 600;
       line-height: 1.25;
     }
 
     .bubble-meta {
       margin-top: 4px;
-      font-size: 0.72rem;
+      font-size: 0.85rem;
       color: var(--dim);
     }
 
-    /* Picked state: glows, gets a little bigger, stops bobbing */
+    /* Highlight without moving the card while more picks are being made. */
     .bubble.picked {
       animation: none;
       border-color: var(--accent);
-      box-shadow: 0 0 22px var(--glow);
+      box-shadow: 0 0 12px var(--glow);
       background: rgba(0, 212, 255, 0.08);
-    }
-
-    /* Dismissed state: sinks, shrinks, fades — then JS removes it */
-    .bubble.dismissed {
-      animation: none;
-      opacity: 0;
-      transform: translateY(90px) scale(0.5);
-      pointer-events: none;      /* can't tap a ghost */
     }
 
     /* ==========================================================
@@ -204,7 +201,7 @@
       padding: 10px 20px 20px;
       max-width: 520px;
       width: 100%;
-      margin: 0 auto;
+      margin: auto auto 0;
     }
 
     .btn {
@@ -234,14 +231,10 @@
 
     .btn.hidden { display: none; }
 
-    /* Small screens: slightly smaller bubbles so 2 columns fit */
-    @media (max-width: 380px) {
-      .bubble { min-width: 132px; max-width: 170px; padding: 12px; }
-    }
-
     @media (prefers-reduced-motion: reduce) {
-      .reactor, .bubble { animation: none; }
-      .bubble { transition: opacity 0.2s ease; }
+      .reactor, .bubble, .sky { animation: none; }
+      .bubble, .btn { transition: none; }
+      .btn:active { transform: none; }
     }
   </style>
 </head>
@@ -292,7 +285,9 @@
     /* ==========================================================
        STATE — what's on screen and what you've picked
        ========================================================== */
-    let items  = [...SAMPLE_ITEMS]; // items currently floating in the sky
+    const PICK_PAUSE = 3000;
+    let pickTimer = null;
+    let items  = [...SAMPLE_ITEMS];
     let picked = [];                // items you've tapped
     let phase  = "pick";            // "pick" → "chooseFirst" → done
 
@@ -300,6 +295,49 @@
     const jarvisText = document.getElementById("jarvis-text");
     const doneBtn    = document.getElementById("done-btn");
     const clearBtn   = document.getElementById("clear-btn");
+
+    function reduceMotion() {
+      return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    }
+
+    async function fadeElements(elements, from, to, duration) {
+      if (reduceMotion() || !Element.prototype.animate) return;
+      await Promise.all(elements.map(el => el.animate(
+        [{ opacity: from }, { opacity: to }],
+        { duration, easing: "ease-in-out", fill: "forwards" }
+      ).finished));
+    }
+
+    async function settleCards(sky, selected) {
+      const cards = [...sky.querySelectorAll(".bubble")];
+      const remaining = selected.map(item =>
+        sky.querySelector('[data-id="' + item.id + '"]'));
+      const dismissed = cards.filter(card => !remaining.includes(card));
+      const animated = !reduceMotion() && Boolean(Element.prototype.animate);
+      cards.forEach(card => { card.disabled = true; });
+
+      await fadeElements(dismissed, 1, 0, 240);
+      // Reorder only while invisible, so selected cards never cross.
+      await fadeElements(remaining, 1, 0, 140);
+      const oldHeight = sky.getBoundingClientRect().height;
+      dismissed.forEach(card => card.remove());
+      remaining.forEach(card => {
+        if (animated) card.getAnimations().forEach(animation => animation.cancel());
+        card.removeAttribute("aria-pressed");
+        sky.appendChild(card);
+      });
+      const newHeight = sky.getBoundingClientRect().height;
+      if (animated) {
+        // One measured height transition prevents the surrounding page jumping.
+        const resize = sky.animate(
+          [{ height: oldHeight + "px" }, { height: newHeight + "px" }],
+          { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+        );
+        await Promise.all([resize.finished, fadeElements(remaining, 0, 1, 320)]);
+        remaining.forEach(card => card.getAnimations().forEach(animation => animation.cancel()));
+      }
+      remaining.forEach(card => { card.disabled = false; });
+    }
 
     /* ==========================================================
        JARVIS SPEAKS — one clean line at a time
@@ -309,31 +347,11 @@
     }
 
     /* ==========================================================
-       LAYOUT — deal bubbles into loose rows across the sky.
-       Positions are percentages so it fits any phone.
-       Picked bubbles get dealt again into one tidy row at top —
-       that's the "float up close together" move.
+       SELECTION TIMER — each tap gives you another three seconds
        ========================================================== */
-    function layoutSky() {
-      const bubbles = sky.querySelectorAll(".bubble:not(.dismissed)");
-      const twoCols = sky.clientWidth < 520;
-      const cols    = twoCols ? 2 : 3;
-
-      bubbles.forEach((bubble, i) => {
-        if (bubble.classList.contains("picked")) {
-          // PICKED: tidy row along the top, close together
-          const row = Math.floor(i / 3);
-          const col = i % 3;
-          bubble.style.setProperty("--x", (4 + col * 32) + "%");
-          bubble.style.setProperty("--y", (4 + row * 22) + "%");
-        } else {
-          // UNPICKED: scattered loosely through the lower sky
-          const row = Math.floor(i / cols);
-          const col = i % cols;
-          bubble.style.setProperty("--x", (6 + col * (twoCols ? 46 : 32)) + "%");
-          bubble.style.setProperty("--y", (28 + row * 22) + "%");
-        }
-      });
+    function schedulePicks() {
+      clearTimeout(pickTimer);
+      if (picked.length) pickTimer = setTimeout(onDone, PICK_PAUSE);
     }
 
     /* ==========================================================
@@ -342,10 +360,13 @@
     function renderSky() {
       sky.innerHTML = "";
       items.forEach(item => {
-        const bubble = document.createElement("div");
+        const bubble = document.createElement("button");
+        bubble.type = "button";
         bubble.className = "bubble";
         if (picked.some(p => p.id === item.id)) bubble.classList.add("picked");
-        bubble.style.setProperty("--delay", (Math.random() * 2).toFixed(2) + "s");
+        if (phase === "pick") bubble.setAttribute("aria-pressed",
+          picked.some(p => p.id === item.id));
+        bubble.disabled = phase === "done";
         bubble.dataset.id = item.id;
         bubble.innerHTML =
           '<div class="bubble-name">' + item.name + '</div>' +
@@ -353,7 +374,6 @@
         bubble.addEventListener("click", () => onBubbleTap(item.id));
         sky.appendChild(bubble);
       });
-      layoutSky();
     }
 
     /* ==========================================================
@@ -374,12 +394,13 @@
 
         const bubble = sky.querySelector('[data-id="' + id + '"]');
         bubble.classList.toggle("picked");
-        layoutSky();                                   // picked ones float up
+        bubble.setAttribute("aria-pressed", bubble.classList.contains("picked"));
+        schedulePicks();
 
         if (picked.length === 0) {
           jarvisSays("Here are your " + items.length + " prints. Tap the ones you want to do.");
         } else {
-          jarvisSays(picked.length + " selected. Tap Done when you're ready.");
+          jarvisSays(picked.length + " selected. Keep picking, or pause 3 seconds to line them up.");
         }
       } else if (phase === "chooseFirst") {
         const item = picked.find(p => p.id === id);
@@ -388,32 +409,23 @@
     }
 
     /* ==========================================================
-       DONE — dismiss the unpicked, then ask "which first?"
+       DONE — fade the unpicked, then ask "which first?"
        ========================================================== */
-    function onDone() {
+    async function onDone() {
       if (phase !== "pick") return;
+      clearTimeout(pickTimer);
 
       if (picked.length === 0) {
         jarvisSays("Nothing selected. Tap a few bubbles first.");
         return;
       }
 
-      // The rest "slowly disappear and move down"
-      items.forEach(item => {
-        if (!picked.some(p => p.id === item.id)) {
-          const bubble = sky.querySelector('[data-id="' + item.id + '"]');
-          bubble.classList.add("dismissed");
-        }
-      });
-
-      // Only your picks remain, floating up top together
+      phase = "settling";
       items = [...picked];
+      await settleCards(sky, items);
       phase = "chooseFirst";
-
-      setTimeout(() => {
-        renderSky();
-        jarvisSays("Which one would you like to start with?");
-      }, 650);  // wait for the dismissal drift to finish
+      sky.scrollIntoView({ block: "start", behavior: reduceMotion() ? "auto" : "smooth" });
+      jarvisSays("Which one would you like to start with?");
     }
 
     /* ==========================================================
@@ -421,6 +433,7 @@
        ========================================================== */
     function startWith(item) {
       phase = "done";
+      sky.querySelectorAll(".bubble").forEach(b => { b.disabled = true; });
 
       // Save the whole working list — first task marked.
       // localStorage = step 1 of the data plan. Today view
@@ -442,6 +455,7 @@
        ========================================================== */
     function onClear() {
       if (phase !== "pick") return;
+      clearTimeout(pickTimer);
       picked = [];
       renderSky();
       jarvisSays("Cleared. Tap the ones you want to do.");
@@ -452,11 +466,10 @@
        ========================================================== */
     doneBtn.addEventListener("click", onDone);
     clearBtn.addEventListener("click", onClear);
-    window.addEventListener("resize", layoutSky);  // rotate phone = re-deal
 
     renderSky();
     jarvisSays("Here are your " + items.length +
-               " prints. Tap the ones you want to do, then Done.");
+               " prints. Tap your picks, then pause 3 seconds or tap Done.");
   </script>
 </body>
 </html>

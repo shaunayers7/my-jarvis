@@ -194,6 +194,12 @@
     }
 
     /* ---------- print queue rows ---------- */
+    #print-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+      gap: 16px;
+    }
+
     .print {
       background: var(--panel);
       border: 1px solid rgba(0, 212, 255, 0.18);
@@ -202,7 +208,8 @@
       display: flex;
       align-items: center;
       gap: 14px;
-      margin-bottom: 10px;
+      min-width: 0;
+      flex-wrap: wrap;
       cursor: pointer;
       transition: opacity 0.35s ease, transform 0.35s ease,
                   border-color 0.15s ease, box-shadow 0.15s ease;
@@ -242,7 +249,7 @@
       color: var(--good);
     }
 
-    .print-body { flex: 1; }
+    .print-body { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 
     .print-name { font-size: 0.98rem; font-weight: 600; line-height: 1.3; }
 

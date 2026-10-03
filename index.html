@@ -8,8 +8,8 @@
          - His line TYPES out letter by letter (voice stand-in)
          - You answer in the prompt box (until voice ships)
          - Ask for things ("show me my prints") and the bubbles
-           rise up right here in the chat — tap your picks, the
-           rest drift away, he asks which to start with.
+           appear in a centered column — tap your picks, pause
+           three seconds, then he asks which to start with.
 
        He greets you with your day brought UP: appointments from
        the Inbox, your print queue from the Picker.
@@ -45,6 +45,7 @@
       --good:    #3ddc84;
       --appt:    #ff5c5c;
       --glow:    rgba(0, 212, 255, 0.35);
+      --settle:  cubic-bezier(0.22, 1, 0.36, 1);
     }
 
     * {
@@ -72,6 +73,7 @@
        ========================================================== */
     .topbar {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 12px;
       padding: 16px 18px 10px;
@@ -110,6 +112,9 @@
     }
 
     .topbar-links a {
+      display: flex;
+      align-items: center;
+      min-height: 44px;
       color: var(--dim);
       text-decoration: none;
       font-size: 0.72rem;
@@ -129,6 +134,7 @@
        ========================================================== */
     .chat {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
       padding: 8px 18px 12px;
       display: flex;
@@ -136,8 +142,11 @@
       gap: 14px;
     }
 
+    .chat > * { flex-shrink: 0; }
+
     /* --- his line (types out) --- */
     .line-jarvis {
+      display: grid;
       align-self: flex-start;
       max-width: 88%;
       background: var(--panel);
@@ -146,32 +155,14 @@
       padding: 13px 16px;
       font-size: 1rem;
       line-height: 1.45;
-      animation: rise 0.25s ease;
+      animation: rise 0.32s var(--settle);
     }
 
-    /* --- your line --- */
-    .line-you {
-      align-self: flex-end;
-      max-width: 88%;
-      background: rgba(0, 212, 255, 0.12);
-      border: 1px solid rgba(0, 212, 255, 0.35);
-      border-radius: 18px 4px 18px 18px;
-      padding: 13px 16px;
-      font-size: 1rem;
-      line-height: 1.45;
-      animation: rise 0.25s ease;
-    }
-
-    .line-you .who {
-      display: block;
-      font-size: 0.65rem;
-      letter-spacing: 0.15em;
-      color: var(--dim);
-      margin-bottom: 4px;
-    }
+    .line-copy, .line-typing { grid-area: 1 / 1; min-width: 0; overflow-wrap: anywhere; }
+    .line-copy { visibility: hidden; }
 
     @keyframes rise {
-      from { opacity: 0; transform: translateY(8px); }
+      from { opacity: 0; transform: translateY(4px); }
       to   { opacity: 1; transform: translateY(0);   }
     }
 
@@ -185,60 +176,51 @@
     @keyframes blink { 50% { opacity: 0; } }
 
     /* ==========================================================
-       BUBBLE SKY — appears inside the chat when you ask for it
+       CARD LIST — centered, in normal flow so cards never overlap
        ========================================================== */
     .sky {
-      position: relative;
-      height: 340px;
       align-self: stretch;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-content: start;
+      gap: 16px;
+      width: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 16px;
       border: 1px solid rgba(0, 212, 255, 0.12);
       border-radius: 18px;
       background: rgba(17, 23, 34, 0.5);
-      overflow: hidden;
-      animation: rise 0.35s ease;
+      animation: rise 0.36s var(--settle);
     }
 
     .bubble {
-      position: absolute;
-      left: var(--x);
-      top:  var(--y);
+      width: 100%;
+      min-width: 0;
+      min-height: 64px;
+      text-align: left;
+      font: inherit;
+      color: var(--text);
+      overflow-wrap: anywhere;
       background: var(--panel);
       border: 1px solid rgba(0, 212, 255, 0.25);
       border-radius: 16px;
       padding: 12px 14px;
-      min-width: 130px;
-      max-width: 180px;
       cursor: pointer;
-      animation: bob 4s ease-in-out infinite;
-      animation-delay: var(--delay);
-      transition: left 0.6s cubic-bezier(.22,1,.36,1),
-                  top  0.6s cubic-bezier(.22,1,.36,1),
-                  transform 0.5s ease, opacity 0.5s ease,
-                  border-color 0.2s ease, box-shadow 0.2s ease;
+      transition: opacity 0.24s ease,
+                  background-color 0.18s ease-out,
+                  border-color 0.18s ease-out, box-shadow 0.18s ease-out;
     }
 
-    @keyframes bob {
-      0%, 100% { transform: translateY(0);    }
-      50%      { transform: translateY(-6px); }
-    }
-
-    .bubble:active { transform: scale(0.95); }
-
-    .bubble-name { font-size: 0.9rem; font-weight: 600; line-height: 1.25; }
-    .bubble-meta { margin-top: 3px; font-size: 0.68rem; color: var(--dim); }
+    .bubble-name { font-size: 1rem; font-weight: 600; line-height: 1.35; }
+    .bubble-meta { margin-top: 4px; font-size: 0.85rem; color: var(--dim); }
+    .bubble:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
     .bubble.picked {
       animation: none;
       border-color: var(--accent);
-      box-shadow: 0 0 20px var(--glow);
+      box-shadow: 0 0 12px var(--glow);
       background: rgba(0, 212, 255, 0.08);
-    }
-
-    .bubble.dismissed {
-      animation: none;
-      opacity: 0;
-      transform: translateY(80px) scale(0.5);
-      pointer-events: none;
     }
 
     /* ==========================================================
@@ -252,6 +234,7 @@
 
     #prompt-input {
       flex: 1;
+      min-width: 0;
       padding: 16px;
       border-radius: 30px;
       border: 1px solid rgba(0, 212, 255, 0.35);
@@ -282,18 +265,15 @@
     }
 
     .send-btn:active {
-      transform: scale(0.9);
+      transform: scale(0.97);
       box-shadow: 0 0 20px var(--glow);
-    }
-
-    @media (max-width: 380px) {
-      .bubble { min-width: 118px; max-width: 150px; padding: 10px 12px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
       .reactor, .bubble, .caret::after { animation: none; }
-      .line-jarvis, .line-you, .sky { animation: none; }
-      .bubble { transition: opacity 0.2s ease; }
+      .line-jarvis, .sky { animation: none; }
+      .bubble, .send-btn { transition: none; }
+      .send-btn:active { transform: none; }
     }
   </style>
 </head>
@@ -327,6 +307,7 @@
        ========================================================== */
     const NAME = "sir";
     const TYPE_SPEED = 22;   // ms per character — his "voice"
+    const PICK_PAUSE = 3000;
 
     /* ==========================================================
        STORAGE HELPERS — same keys the other views use
@@ -366,6 +347,49 @@
     let typing = false;       // don't accept input mid-sentence
     let picker = null;        // live picker state, or null when no sky is open
 
+    function reduceMotion() {
+      return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    }
+
+    async function fadeElements(elements, from, to, duration) {
+      if (reduceMotion() || !Element.prototype.animate) return;
+      await Promise.all(elements.map(el => el.animate(
+        [{ opacity: from }, { opacity: to }],
+        { duration, easing: "ease-in-out", fill: "forwards" }
+      ).finished));
+    }
+
+    async function settleCards(sky, selected) {
+      const cards = [...sky.querySelectorAll(".bubble")];
+      const remaining = selected.map(item =>
+        sky.querySelector('[data-id="' + item.id + '"]'));
+      const dismissed = cards.filter(card => !remaining.includes(card));
+      const animated = !reduceMotion() && Boolean(Element.prototype.animate);
+      cards.forEach(card => { card.disabled = true; });
+
+      await fadeElements(dismissed, 1, 0, 240);
+      // Reorder only while invisible, so selected cards never cross.
+      await fadeElements(remaining, 1, 0, 140);
+      const oldHeight = sky.getBoundingClientRect().height;
+      dismissed.forEach(card => card.remove());
+      remaining.forEach(card => {
+        if (animated) card.getAnimations().forEach(animation => animation.cancel());
+        card.removeAttribute("aria-pressed");
+        sky.appendChild(card);
+      });
+      const newHeight = sky.getBoundingClientRect().height;
+      if (animated) {
+        // One measured height transition prevents the surrounding page jumping.
+        const resize = sky.animate(
+          [{ height: oldHeight + "px" }, { height: newHeight + "px" }],
+          { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+        );
+        await Promise.all([resize.finished, fadeElements(remaining, 0, 1, 320)]);
+        remaining.forEach(card => card.getAnimations().forEach(animation => animation.cancel()));
+      }
+      remaining.forEach(card => { card.disabled = false; });
+    }
+
     /* ==========================================================
        JARVIS SPEAKS — types a line into the chat, letter by
        letter. Returns a Promise so lines can chain in order.
@@ -376,17 +400,32 @@
         reactor.classList.add("thinking");
 
         const line = document.createElement("div");
-        line.className = "line-jarvis caret";
+        line.className = "line-jarvis";
+        const copy = document.createElement("span");
+        copy.className = "line-copy";
+        copy.setAttribute("aria-hidden", "true");
+        copy.textContent = text;
+        const spoken = document.createElement("span");
+        spoken.className = "line-typing caret";
+        line.append(copy, spoken);
         chat.appendChild(line);
         scrollChat();
 
+        if (reduceMotion()) {
+          spoken.textContent = text;
+          spoken.classList.remove("caret");
+          reactor.classList.remove("thinking");
+          typing = false;
+          resolve();
+          return;
+        }
+
         let i = 0;
         const tick = setInterval(() => {
-          line.textContent = text.slice(0, ++i);
-          scrollChat();
+          spoken.textContent = text.slice(0, ++i);
           if (i >= text.length) {
             clearInterval(tick);
-            line.classList.remove("caret");
+            spoken.classList.remove("caret");
             reactor.classList.remove("thinking");
             typing = false;
             resolve();
@@ -395,24 +434,15 @@
       });
     }
 
-    function youSaid(text) {
-      const line = document.createElement("div");
-      line.className = "line-you";
-      line.innerHTML = '<span class="who">YOU</span>';
-      line.appendChild(document.createTextNode(text));
-      chat.appendChild(line);
-      scrollChat();
-    }
-
     function scrollChat() {
-      chat.scrollTop = chat.scrollHeight;
+      chat.scrollTo({ top: chat.scrollHeight, behavior: reduceMotion() ? "auto" : "smooth" });
     }
 
     /* ==========================================================
-       THE SKY — bubbles rise inside the chat when asked
+       THE SKY — centered suggestion cards inside the chat
        ========================================================== */
     function openSky(items) {
-      picker = { phase: "pick", items: [...items], picked: [], el: null };
+      picker = { phase: "pick", items: [...items], picked: [], el: null, timer: null };
 
       const sky = document.createElement("div");
       sky.className = "sky";
@@ -420,10 +450,11 @@
       picker.el = sky;
 
       picker.items.forEach(item => {
-        const b = document.createElement("div");
+        const b = document.createElement("button");
+        b.type = "button";
         b.className = "bubble";
         b.dataset.id = item.id;
-        b.style.setProperty("--delay", (Math.random() * 2).toFixed(2) + "s");
+        b.setAttribute("aria-pressed", "false");
         b.innerHTML =
           '<div class="bubble-name"></div><div class="bubble-meta"></div>';
         b.querySelector(".bubble-name").textContent = item.name;
@@ -432,26 +463,20 @@
         sky.appendChild(b);
       });
 
-      layoutSky(sky);
-      scrollChat();
+      chat.scrollTo({
+        top: sky.offsetTop - chat.offsetTop,
+        behavior: reduceMotion() ? "auto" : "smooth"
+      });
     }
 
-    /* Deal bubbles: picked ones float up into a tidy row,
-       unpicked ones drift loose in the lower sky. */
-    function layoutSky(sky) {
-      const bubbles = sky.querySelectorAll(".bubble:not(.dismissed)");
-      let pickRow = 0, pickCol = 0, restRow = 0, restCol = 0;
-      bubbles.forEach(b => {
-        if (b.classList.contains("picked")) {
-          b.style.setProperty("--x", (5 + pickCol * 48) + "%");
-          b.style.setProperty("--y", (5 + pickRow * 26) + "%");
-          pickCol++; if (pickCol > 1) { pickCol = 0; pickRow++; }
-        } else {
-          b.style.setProperty("--x", (5 + restCol * 48) + "%");
-          b.style.setProperty("--y", (34 + restRow * 22) + "%");
-          restCol++; if (restCol > 1) { restCol = 0; restRow++; }
-        }
-      });
+    function schedulePicks() {
+      clearTimeout(picker.timer);
+      if (!picker.picked.length) return;
+      picker.timer = setTimeout(() => {
+        // Do not interrupt a sentence being typed by either person.
+        if (typing || input.value.trim()) schedulePicks();
+        else confirmPicks();
+      }, PICK_PAUSE);
     }
 
     function onBubbleTap(id) {
@@ -465,40 +490,30 @@
 
         const bubble = picker.el.querySelector('[data-id="' + id + '"]');
         bubble.classList.toggle("picked");
-        layoutSky(picker.el);
+        bubble.setAttribute("aria-pressed", bubble.classList.contains("picked"));
+        schedulePicks();
       } else if (picker.phase === "chooseFirst") {
         startWith(picker.picked.find(p => p.id === id));
       }
     }
 
     /* ==========================================================
-       PICKER FLOW — confirm picks → rest drift away → which first?
+       PICKER FLOW — confirm picks → rest fade away → which first?
        ========================================================== */
     async function confirmPicks() {
+      if (!picker || picker.phase !== "pick") return;
+      clearTimeout(picker.timer);
       if (picker.picked.length === 0) {
         await jarvisSays("Nothing selected — tap a few bubbles first.");
         return;
       }
 
-      // The rest sink, shrink, fade.
-      picker.items.forEach(item => {
-        if (!picker.picked.some(p => p.id === item.id)) {
-          picker.el.querySelector('[data-id="' + item.id + '"]')
-            .classList.add("dismissed");
-        }
-      });
-
-      await new Promise(r => setTimeout(r, 650));   // let them drift
-
-      // Rebuild the sky with only your picks, together up top
-      const survivors = [...picker.picked];
-      picker.el.remove();
-      openSky(survivors);
-      picker.phase = "chooseFirst";
-      picker.items.forEach(i =>
-        picker.el.querySelector('[data-id="' + i.id + '"]')
-          .classList.add("picked"));
-      layoutSky(picker.el);
+      const activePicker = picker;
+      activePicker.phase = "settling";
+      const survivors = [...activePicker.picked];
+      await settleCards(activePicker.el, survivors);
+      activePicker.items = survivors;
+      activePicker.phase = "chooseFirst";
 
       await jarvisSays(survivors.length + " it is. Which one first — tap it or name it.");
     }
@@ -509,13 +524,11 @@
       const list = picker.picked.map(p => ({ ...p, first: p.id === item.id }));
       saveJSON("jarvis.printQueue", list);
 
-      // The sky fades out — job done, back to conversation
       const skyEl = picker.el;
-      skyEl.style.transition = "opacity 0.5s ease";
-      skyEl.style.opacity = "0";
-      setTimeout(() => skyEl.remove(), 550);
+      skyEl.querySelectorAll(".bubble").forEach(card => { card.disabled = true; });
       picker = null;
-
+      await fadeElements([skyEl], 1, 0, 240);
+      skyEl.remove();
       await jarvisSays('Starting with "' + item.name + '." Your list of ' +
                        list.length + " is saved — waiting in Today.");
     }
@@ -580,11 +593,14 @@
               picker.el.querySelector('[data-id="' + i.id + '"]')
                 .classList.add("picked");
             });
-            layoutSky(picker.el);
-            return jarvisSays("All of them, then. Say done when ready.");
+            picker.el.querySelectorAll(".bubble").forEach(b =>
+              b.setAttribute("aria-pressed", "true"));
+            schedulePicks();
+            return jarvisSays("All selected. I'll line them up after a short pause.");
           }
           return jarvisSays("Tap the ones you want — or say done.");
         }
+        if (picker.phase === "settling") return;
         if (picker.phase === "chooseFirst") {
           const num = lower.match(/\b(1st|first|2nd|second|3rd|third|\d+)\b/);
           let choice = null;
@@ -609,7 +625,7 @@
 
       // --- COMMAND: show me prints ---
       if (/\b(show|prints?|print list|pick|choose|queue)\b/.test(lower)) {
-        await jarvisSays("Of course. Here are your prints — tap the ones you want, then say done.");
+        await jarvisSays("Of course. Tap your prints. After a 3-second pause, I'll line up your picks. You can also say done.");
         return openSky(PRINT_CATALOG);
       }
 
@@ -657,12 +673,14 @@
       const text = input.value.trim();
       if (!text || typing) return;
       input.value = "";
-      youSaid(text);
       route(text);
     }
 
     document.getElementById("send-btn").addEventListener("click", send);
     input.addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+    input.addEventListener("input", () => {
+      if (picker && picker.phase === "pick") schedulePicks();
+    });
 
     /* ==========================================================
        OPEN — he speaks first
