@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Jarvis — a second brain personal assistant">
+  <meta name="theme-color" content="#0f1115">
+  <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Jarvis">
+  <title>Jarvis</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="topbar">
+    <button class="icon-btn" id="menu-toggle" type="button" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </button>
+    <h1 class="topbar__title" id="page-title">Home</h1>
+    <span class="status-dot" id="net-status" title="Online" aria-label="Online"></span>
+  </header>
+
+  <nav class="sidebar" id="sidebar" aria-label="Main navigation">
+    <div class="sidebar__brand">
+      <img src="icons/icon.svg" alt="" width="32" height="32">
+      <span>Jarvis</span>
+    </div>
+    <ul class="sidebar__nav">
+      <li><a href="#/home" data-route="home">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>Home</a></li>
+      <li><a href="#/tasks" data-route="tasks">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>Tasks</a></li>
+      <li><a href="#/notes" data-route="notes">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5"/></svg>Notes</a></li>
+      <li><a href="#/calendar" data-route="calendar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM16 3v4M8 3v4M3 11h18"/></svg>Calendar</a></li>
+      <li><a href="#/settings" data-route="settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</a></li>
+    </ul>
+    <p class="sidebar__footer">v0.1.0</p>
+  </nav>
+  <div class="scrim" id="scrim" hidden></div>
+
+  <main class="content" id="main" tabindex="-1">
+    <section class="view" data-view="home">
+      <div class="greeting">
+        <p class="greeting__date" id="today-date"></p>
+        <h2 class="greeting__title"><span id="greeting-text">Hello</span> 👋</h2>
+      </div>
+
+      <form class="ask" id="ask-form" role="search">
+        <label class="visually-hidden" for="ask-input">Ask Jarvis</label>
+        <input id="ask-input" type="text" placeholder="Ask Jarvis anything…" autocomplete="off">
+        <button type="submit" class="btn">Ask</button>
+      </form>
+      <p class="ask-reply card__muted" id="ask-reply" aria-live="polite"></p>
+
+      <div class="grid">
+        <article class="card">
+          <h3 class="card__title">Clock</h3>
+          <p class="card__big" id="clock">--:--</p>
+        </article>
+        <article class="card">
+          <h3 class="card__title">Tasks</h3>
+          <p class="card__big" id="task-count">0</p>
+          <p class="card__muted">open tasks</p>
+        </article>
+        <article class="card card--wide">
+          <h3 class="card__title">Quick note</h3>
+          <form id="note-form" class="row">
+            <label class="visually-hidden" for="note-input">Quick note</label>
+            <input id="note-input" type="text" placeholder="Jot something down…" autocomplete="off">
+            <button type="submit" class="btn">Save</button>
+          </form>
+          <ul class="list" id="note-list"></ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="view" data-view="tasks" hidden>
+      <form id="task-form" class="row">
+        <label class="visually-hidden" for="task-input">New task</label>
+        <input id="task-input" type="text" placeholder="Add a task…" autocomplete="off">
+        <button type="submit" class="btn">Add</button>
+      </form>
+      <ul class="list" id="task-list"></ul>
+    </section>
+
+    <section class="view" data-view="notes" hidden>
+      <p class="card__muted">Your notes will appear here. Use “Quick note” on the Home dashboard to add one.</p>
+      <ul class="list" id="all-notes"></ul>
+    </section>
+
+    <section class="view" data-view="calendar" hidden>
+      <p class="card__muted">Calendar coming soon.</p>
+    </section>
+
+    <section class="view" data-view="settings" hidden>
+      <div class="card">
+        <h3 class="card__title">Your name</h3>
+        <form id="name-form" class="row">
+          <label class="visually-hidden" for="name-input">Your name</label>
+          <input id="name-input" type="text" placeholder="e.g. Tony" autocomplete="given-name">
+          <button type="submit" class="btn">Save</button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/app.js" defer></script>
+</body>
+</html>
